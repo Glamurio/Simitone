@@ -53,8 +53,29 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Keeps one pre-release per branch. Its tag is moved to the newest built commit and the
+          # zip asset is replaced. Failures are reported as annotations, which (unlike job logs)
+          # can be read without signing in.
+          $ErrorActionPreference = 'Continue'
           $branch = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'
           $tag = "dev-build-$branch"
-          gh release delete $tag --yes --cleanup-tag 2>$null
-          $global:LASTEXITCODE = 0
-          gh release create $tag artifacts/SimitoneWindows.zip --prerelease --target "${{ github.sha }}" --title "Simitone dev build ($branch)" --notes "Automated build of ${{ github.sha }} from branch $branch. Unzip and run Simitone.Windows.exe. Requires the .NET 9 Desktop Runtime and the ASP.NET Core 9 Runtime (both included in the .NET 9 SDK)."
+          $notes = "Automated build of ${{ github.sha }} from branch $branch. Unzip and run Simitone.Windows.exe. Requires the .NET 9 Desktop Runtime and the ASP.NET Core 9 Runtime (both included in the .NET 9 SDK)."
+          function Report($what, $out) {
+            Write-Output ("::error title=Release publish failed ($what)::" + (($out | Out-String) -replace "`r?`n", ' | '))
+            exit 1
+          }
+          $out = git tag -f $tag "${{ github.sha }}" 2>&1
+          if ($LASTEXITCODE -ne 0) { Report 'git tag' $out }
+          $out = git push -f origin "refs/tags/$tag" 2>&1
+          if ($LASTEXITCODE -ne 0) { Report 'git push tag' $out }
+          $null = gh release view $tag --json tagName 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $out = gh release upload $tag artifacts/SimitoneWindows.zip --clobber 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release upload' $out }
+            $out = gh release edit $tag --prerelease --notes $notes 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release edit' $out }
+          } else {
+            $out = gh release create $tag artifacts/SimitoneWindows.zip --verify-tag --prerelease --title "Simitone dev build ($branch)" --notes $notes 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release create' $out }
+          }
+          exit 0
