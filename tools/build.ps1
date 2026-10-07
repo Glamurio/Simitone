@@ -122,6 +122,20 @@ if (-not (Test-Path (Join-Path $BinDir 'Monogame\Windows\MonoGame.Framework.dll'
     Write-Host 'WARNING: Monogame\Windows\MonoGame.Framework.dll is missing from the build output; the game will not start.' -ForegroundColor Yellow
 }
 
+# The app is framework-dependent and needs all three .NET 9 shared runtimes. ASP.NET Core is
+# required because FreeSO's TSO client project (referenced by Simitone.Windows) pulls in its
+# web-API server project. A newer SDK alone (e.g. .NET 10) can build the code but does not
+# provide the 9.0 runtimes.
+$runtimes = Invoke-Native dotnet @('--list-runtimes')
+foreach ($fw in @('Microsoft.NETCore.App', 'Microsoft.WindowsDesktop.App', 'Microsoft.AspNetCore.App')) {
+    $found = $false
+    foreach ($line in $runtimes) { if ($line -like "$fw 9.*") { $found = $true } }
+    if (-not $found) {
+        Write-Host "WARNING: runtime $fw 9.x is not installed; the game will not start." -ForegroundColor Yellow
+        Write-Host '         Install the .NET 9 SDK (winget install Microsoft.DotNet.SDK.9), which includes it.'
+    }
+}
+
 if ($NoDeploy) {
     Write-Step "Build output (not deployed): $BinDir"
     exit 0

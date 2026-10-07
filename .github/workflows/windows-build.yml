@@ -57,4 +57,4 @@ jobs:
           $tag = "dev-build-$branch"
           gh release delete $tag --yes --cleanup-tag 2>$null
           $global:LASTEXITCODE = 0
-          gh release create $tag artifacts/SimitoneWindows.zip --prerelease --target "${{ github.sha }}" --title "Simitone dev build ($branch)" --notes "Automated build of ${{ github.sha }} from branch $branch. Unzip and run Simitone.Windows.exe (requires the .NET 9 Desktop Runtime)."
+          gh release create $tag artifacts/SimitoneWindows.zip --prerelease --target "${{ github.sha }}" --title "Simitone dev build ($branch)" --notes "Automated build of ${{ github.sha }} from branch $branch. Unzip and run Simitone.Windows.exe. Requires the .NET 9 Desktop Runtime and the ASP.NET Core 9 Runtime (both included in the .NET 9 SDK)."
