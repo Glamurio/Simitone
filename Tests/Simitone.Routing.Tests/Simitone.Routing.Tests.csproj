@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Geometry tests for the routing planner (VMShimmyPlanner). Deliberately dependency-free: no test
+    framework packages, Program.cs returns the number of failed tests as the exit code.
+    Run with dotnet run (project Tests/Simitone.Routing.Tests, configuration Release).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\FreeSO\TSOClient\tso.simantics\FSO.SimAntics.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -95,6 +95,11 @@ namespace Simitone.Client.UI.Panels
         {
             shouldHide = true;
             if (string.IsNullOrWhiteSpace(commandString)) return; // a blank textbox should close after hitting enter -- even if a command was never run.
+            if (tryClientCommand(commandString))
+            {
+                FSO.HIT.HITVM.Get().PlaySoundEvent(UISounds.Click);
+                return;
+            }
 
             var cheat = new VMNetCheatCmd();
             var context = new VMCheatContext();
@@ -134,6 +139,34 @@ namespace Simitone.Client.UI.Panels
             }
             FSO.HIT.HITVM.Get().PlaySoundEvent(sndEvent);
         } 
+
+        /// <summary>
+        /// Development toggles that only affect this client and are not sent to the VM as cheats:
+        ///   draw_routes [on|off]  - draw route rectangles, paths and shimmy pinches (same name as the original game's cheat)
+        ///   shimmy [on|off]       - let Sims side-step through narrow gaps between objects
+        /// Without on/off the setting is toggled.
+        /// </summary>
+        private bool tryClientCommand(string commandString)
+        {
+            var parts = commandString.Trim().ToLowerInvariant().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0) return false;
+            bool? value = null;
+            if (parts.Length > 1)
+            {
+                if (parts[1] == "on") value = true;
+                else if (parts[1] == "off") value = false;
+            }
+            switch (parts[0])
+            {
+                case "draw_routes":
+                    FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW = value ?? !FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW;
+                    return true;
+                case "shimmy":
+                    FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled = value ?? !FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled;
+                    return true;
+            }
+            return false;
+        }
 
         private String trimRepetitions(string input)
         {
