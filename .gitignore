@@ -243,3 +243,6 @@ ModelManifest.xml
 
 Client/Simitone/Simitone/
 Client/Simitone/TS1.Scripts
+SimitoneWindows
+outputs/*
+docs/*
