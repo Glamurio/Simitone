@@ -179,14 +179,33 @@ namespace Simitone.Routing.Tests
                 Check(p.RoutesEvaluated == 1, "expected only the direct route to be evaluated, got " + p.RoutesEvaluated);
             });
 
-            yield return ("short detour is preferred over shimmying", () =>
+            yield return ("open room: crossing two diagonal chairs is shimmied when it is shorter", () =>
             {
-                //two chairs touching diagonally in the middle of an open room: walking around costs little
+                //nothing forces the shimmy, walking around either chair is possible but longer
                 var s = new Scene();
                 s.Obj(67, 67, 77, 77);
                 s.Obj(83, 83, 93, 93);
-                var legs = s.Planner().Plan(new Point(90, 60), new Point(70, 100), 0);
-                Check(legs != null && legs.All(x => x is VMRectRouteLeg), "expected walking around: " + Describe(legs));
+                ExpectShimmyRoute(s.Planner(), new Point(90, 60), new Point(70, 100), 1);
+            });
+
+            yield return ("open room: a table and a chair touching diagonally are shimmied when it is shorter", () =>
+            {
+                //a 1-tile table fills its tile (inflated 61..83), the chair keeps 3 units clear (inflated 80..96)
+                var s = new Scene();
+                s.Obj(64, 64, 80, 80);
+                s.Obj(83, 83, 93, 93);
+                var p = s.Planner();
+                Check(p.Pinches.Count == 1, "expected one pinch, got " + p.Pinches.Count);
+                ExpectShimmyRoute(p, new Point(104, 56), new Point(56, 104), 1);
+            });
+
+            yield return ("open room: walking is kept when the pinch is not on a shorter path", () =>
+            {
+                var s = new Scene();
+                s.Obj(67, 67, 77, 77);
+                s.Obj(83, 83, 93, 93);
+                var legs = s.Planner().Plan(new Point(100, 70), new Point(100, 110), 0);
+                Check(legs != null && legs.All(x => x is VMRectRouteLeg), "expected walking: " + Describe(legs));
             });
 
             yield return ("long detour is replaced by shimmying", () =>
@@ -211,6 +230,18 @@ namespace Simitone.Routing.Tests
                 var p = s.Planner();
                 Check(p.Pinches.Count == 1, "expected one pinch, got " + p.Pinches.Count);
                 ExpectShimmyRoute(p, Top, Bottom, 1);
+            });
+
+            yield return ("straight gap of 3 (half a Sim) is not a pinch", () =>
+            {
+                var s = new Scene();
+                s.Obj(67, 67, 77, 77);
+                s.Obj(80, 67, 90, 77);
+                s.Static.Add(new VMObstacle(0, 69, 67, 75));
+                s.Static.Add(new VMObstacle(90, 69, 160, 75));
+                var p = s.Planner();
+                Check(p.Pinches.Count == 0, "expected no pinch, got " + p.Pinches.Count);
+                Check(p.Plan(Top, Bottom, 0) == null, "expected no route");
             });
 
             yield return ("long straight corridor is not a pinch", () =>
