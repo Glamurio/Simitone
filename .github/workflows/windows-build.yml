@@ -1,0 +1,60 @@
+name: Simitone Windows build
+
+# Builds Simitone.Windows with the same script developers use locally (tools/build.ps1)
+# and publishes the result as a zip:
+#   - as a workflow artifact (always), and
+#   - as a rolling pre-release named "dev-build-<branch>" (pushes only), so a build can be
+#     downloaded without opening the Actions UI.
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['docs/**', '**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout (with FreeSO submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build and deploy to artifacts/SimitoneWindows
+        shell: pwsh
+        run: ./tools/build.ps1 -Configuration Release -OutputDir artifacts/SimitoneWindows -NonInteractive
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/SimitoneWindows/* -DestinationPath artifacts/SimitoneWindows.zip -CompressionLevel Optimal
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimitoneWindows-${{ github.sha }}
+          path: artifacts/SimitoneWindows.zip
+          retention-days: 14
+
+      - name: Publish rolling pre-release
+        if: github.event_name == 'push'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $branch = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'
+          $tag = "dev-build-$branch"
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          $global:LASTEXITCODE = 0
+          gh release create $tag artifacts/SimitoneWindows.zip --prerelease --target "${{ github.sha }}" --title "Simitone dev build ($branch)" --notes "Automated build of ${{ github.sha }} from branch $branch. Unzip and run Simitone.Windows.exe (requires the .NET 9 Desktop Runtime)."
