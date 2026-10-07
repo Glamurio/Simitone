@@ -72,9 +72,11 @@ jobs:
             if ($LASTEXITCODE -ne 0) { Write-Output "::error title=Routing tests::$LASTEXITCODE failed (or the test project did not build)"; exit 1 }
           }
 
+      # -KeepFreeSO: on runs that cannot commit the synced gitlink (tags), build.ps1 would otherwise move FreeSO
+      # back to the gitlink.
       - name: Build and deploy to artifacts/SimitoneWindows
         shell: pwsh
-        run: ./tools/build.ps1 -Configuration Release -OutputDir artifacts/SimitoneWindows -NonInteractive
+        run: ./tools/build.ps1 -Configuration Release -OutputDir artifacts/SimitoneWindows -NonInteractive -KeepFreeSO
 
       - name: Zip
         shell: pwsh
