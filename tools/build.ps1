@@ -4,8 +4,11 @@
 
 .DESCRIPTION
     One-step local rebuild for development:
-      1. Initialises the FreeSO git submodule if it has never been checked out
-         (an existing checkout is never touched, so local FreeSO work is safe).
+      1. Initialises the FreeSO git submodule if it has never been checked out, and moves an existing
+         checkout to the commit this Simitone revision expects when that is safe: no uncommitted changes
+         to tracked files, and the checked-out commit is already on a remote branch or is an ancestor of
+         the expected one. Local FreeSO work (uncommitted or unpushed) is never touched; the script warns
+         and builds it as it is. -KeepFreeSO skips the update entirely.
       2. Checks for a .NET 9 (or newer) SDK.
       3. Runs `dotnet build` on Client\Simitone\Simitone.Windows\Simitone.Windows.csproj.
       4. Copies the build output into the deploy folder (default: .\SimitoneWindows)
@@ -25,6 +28,7 @@
     .\build.cmd -Run                 # build, deploy, then start the game
     .\build.cmd -Configuration Debug # Debug build (better stack traces / debugger)
     .\build.cmd -Clean               # clean before building
+    .\build.cmd -KeepFreeSO          # build the FreeSO checkout as it is, even if Simitone expects another commit
 #>
 [CmdletBinding()]
 param(
@@ -40,6 +44,8 @@ param(
     [switch]$Run,
     [switch]$Clean,
     [switch]$NoDeploy,
+    # Do not move the FreeSO submodule to the commit this Simitone revision expects.
+    [switch]$KeepFreeSO,
     # Never prompt (used by CI).
     [switch]$NonInteractive
 )
@@ -75,12 +81,42 @@ if (-not (Test-Path $FreeSOMarker)) {
     if ($LASTEXITCODE -ne 0) { Fail 'git submodule update failed.' }
     if (-not (Test-Path $FreeSOMarker)) { Fail 'FreeSO submodule still missing after init.' }
 } elseif (Get-Command git -ErrorAction SilentlyContinue) {
-    # An existing checkout is never changed (it may hold local FreeSO work), but say so when it is not the
-    # commit this Simitone revision expects, e.g. after pulling a branch that moved the submodule.
-    $status = (& git -C $RepoRoot submodule status FreeSO 2>$null | Out-String).Trim()
+    # After pulling a Simitone branch that moved the submodule, FreeSO is still at the old commit and the build
+    # fails on missing engine code. Move it along, unless that could lose or hide local FreeSO work.
+    $status = (Invoke-Native git @('-C', $RepoRoot, 'submodule', 'status', 'FreeSO') | Out-String).Trim()
     if ($status.StartsWith('+')) {
-        Write-Host 'WARNING: FreeSO is not at the commit this Simitone revision expects. To update it (after committing or' -ForegroundColor Yellow
-        Write-Host '         stashing any FreeSO changes):  git submodule sync FreeSO; git submodule update --init --recursive FreeSO' -ForegroundColor Yellow
+        $FreeSODir = Join-Path $RepoRoot 'FreeSO'
+        $gitlink   = (Invoke-Native git @('-C', $RepoRoot, 'ls-tree', 'HEAD', 'FreeSO') | Out-String).Trim() -split '\s+'
+        $expected  = if ($gitlink.Count -ge 3) { $gitlink[2] } else { '' }
+        $current   = (Invoke-Native git @('-C', $FreeSODir, 'rev-parse', 'HEAD') | Out-String).Trim()
+        $dirty     = (Invoke-Native git @('-C', $FreeSODir, 'status', '--porcelain', '--untracked-files=no') | Out-String).Trim()
+        $pushed    = (Invoke-Native git @('-C', $FreeSODir, 'branch', '-r', '--contains', 'HEAD') | Out-String).Trim()
+        $isAncestor = $false
+        if ($expected) {
+            #cat-file -e is silent when the expected commit has not been fetched yet (merge-base would print an error)
+            Invoke-Native git @('-C', $FreeSODir, 'cat-file', '-e', "$expected^{commit}") | Out-Null
+            if ($LASTEXITCODE -eq 0) {
+                Invoke-Native git @('-C', $FreeSODir, 'merge-base', '--is-ancestor', 'HEAD', $expected) | Out-Null
+                $isAncestor = ($LASTEXITCODE -eq 0)
+            }
+        }
+        $short = { param($sha) if ($sha.Length -gt 9) { $sha.Substring(0, 9) } else { $sha } }
+        $manual = 'git submodule sync FreeSO; git submodule update --init --recursive FreeSO'
+        if ($KeepFreeSO -or -not $expected) {
+            Write-Host "NOTE: building FreeSO $(& $short $current) as it is; this Simitone revision expects $(& $short $expected)." -ForegroundColor Yellow
+        } elseif ($dirty) {
+            Write-Host "WARNING: FreeSO has uncommitted changes and is not at the commit this Simitone revision expects" -ForegroundColor Yellow
+            Write-Host "         ($(& $short $expected)). Building it as it is; the build may fail. To update after committing or" -ForegroundColor Yellow
+            Write-Host "         stashing the FreeSO changes:  $manual" -ForegroundColor Yellow
+        } elseif (-not $pushed -and -not $isAncestor) {
+            Write-Host "WARNING: FreeSO is at $(& $short $current), a commit that is not on any remote branch, so it is left alone." -ForegroundColor Yellow
+            Write-Host "         This Simitone revision expects $(& $short $expected). To switch:  $manual" -ForegroundColor Yellow
+        } else {
+            Write-Step "Updating FreeSO from $(& $short $current) to $(& $short $expected), the commit this Simitone revision expects"
+            Invoke-Native git @('-C', $RepoRoot, 'submodule', 'sync', 'FreeSO') | Out-Host
+            Invoke-Native git @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive', 'FreeSO') | Out-Host
+            if ($LASTEXITCODE -ne 0) { Fail "Updating FreeSO failed. Run manually:  $manual" }
+        }
     }
 }
 
