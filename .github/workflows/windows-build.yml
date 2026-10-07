@@ -1,0 +1,122 @@
+name: Simitone Windows build
+
+# Builds Simitone.Windows with the same script developers use locally (tools/build.ps1)
+# and publishes the result as a zip:
+#   - as a workflow artifact (always), and
+#   - as a rolling pre-release named "dev-build-<branch>", so a build can be downloaded without
+#     opening the Actions UI.
+# Pushes that only add .patches/ are skipped: apply-patches.yml applies them and then starts this
+# workflow with workflow_dispatch (pushes made with GITHUB_TOKEN do not trigger workflows).
+on:
+  push:
+    branches: ['**']
+    paths-ignore: ['docs/**', '**.md', '.patches/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout (with FreeSO submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      # tools/freeso.ref names the FreeSO commit (in github.com/Glamurio/FreeSO) this revision builds
+      # against. If it differs from the FreeSO gitlink, check that commit out and commit the updated
+      # gitlink back to the branch (pushes made with GITHUB_TOKEN do not start another run).
+      # This lets the submodule be moved by editing a text file.
+      - name: Sync FreeSO submodule to tools/freeso.ref
+        id: sync
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Continue'
+          $want = (Get-Content tools/freeso.ref -Raw).Trim()
+          $have = (git rev-parse HEAD:FreeSO).Trim()
+          $sha = (git rev-parse HEAD).Trim()
+          if ($want -ne $have) {
+            Write-Output "FreeSO gitlink is $have, tools/freeso.ref wants $want"
+            git -C FreeSO fetch --no-tags origin $want
+            if ($LASTEXITCODE -ne 0) { Write-Output "::error title=FreeSO sync failed::cannot fetch $want from the FreeSO remote"; exit 1 }
+            git -C FreeSO checkout --detach $want
+            if ($LASTEXITCODE -ne 0) { Write-Output "::error title=FreeSO sync failed::cannot check out $want"; exit 1 }
+            git -C FreeSO submodule update --init --recursive
+            if ("${{ github.ref_type }}" -eq 'branch') {
+              git add FreeSO
+              git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Update FreeSO submodule to $want (from tools/freeso.ref)"
+              git push origin "HEAD:refs/heads/${{ github.ref_name }}"
+              if ($LASTEXITCODE -ne 0) { Write-Output "::error title=FreeSO sync failed::cannot push the submodule update"; exit 1 }
+              $sha = (git rev-parse HEAD).Trim()
+            }
+          }
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          exit 0
+
+      - name: Install .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Routing tests
+        shell: pwsh
+        run: |
+          if (Test-Path Tests/Simitone.Routing.Tests) {
+            dotnet run --project Tests/Simitone.Routing.Tests -c Release
+            if ($LASTEXITCODE -ne 0) { Write-Output "::error title=Routing tests::$LASTEXITCODE failed (or the test project did not build)"; exit 1 }
+          }
+
+      - name: Build and deploy to artifacts/SimitoneWindows
+        shell: pwsh
+        run: ./tools/build.ps1 -Configuration Release -OutputDir artifacts/SimitoneWindows -NonInteractive
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path artifacts/SimitoneWindows/* -DestinationPath artifacts/SimitoneWindows.zip -CompressionLevel Optimal
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SimitoneWindows-${{ steps.sync.outputs.sha }}
+          path: artifacts/SimitoneWindows.zip
+          retention-days: 14
+
+      - name: Publish rolling pre-release
+        if: github.ref_type == 'branch'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Keeps one pre-release per branch. Its tag is moved to the newest built commit and the
+          # zip asset is replaced. Failures are reported as annotations, which (unlike job logs)
+          # can be read without signing in.
+          $ErrorActionPreference = 'Continue'
+          $sha = "${{ steps.sync.outputs.sha }}"
+          $branch = "${{ github.ref_name }}" -replace '[^A-Za-z0-9._-]', '-'
+          $tag = "dev-build-$branch"
+          $notes = "Automated build of $sha from branch $branch. Unzip and run Simitone.Windows.exe. Requires the .NET 9 Desktop Runtime and the ASP.NET Core 9 Runtime (both included in the .NET 9 SDK)."
+          function Report($what, $out) {
+            Write-Output ("::error title=Release publish failed ($what)::" + (($out | Out-String) -replace "`r?`n", ' | '))
+            exit 1
+          }
+          $out = git tag -f $tag $sha 2>&1
+          if ($LASTEXITCODE -ne 0) { Report 'git tag' $out }
+          $out = git push -f origin "refs/tags/$tag" 2>&1
+          if ($LASTEXITCODE -ne 0) { Report 'git push tag' $out }
+          $null = gh release view $tag --json tagName 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            $out = gh release upload $tag artifacts/SimitoneWindows.zip --clobber 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release upload' $out }
+            $out = gh release edit $tag --prerelease --notes $notes 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release edit' $out }
+          } else {
+            $out = gh release create $tag artifacts/SimitoneWindows.zip --verify-tag --prerelease --title "Simitone dev build ($branch)" --notes $notes 2>&1
+            if ($LASTEXITCODE -ne 0) { Report 'gh release create' $out }
+          }
+          exit 0

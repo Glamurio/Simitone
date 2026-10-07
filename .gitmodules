@@ -1,3 +1,4 @@
 [submodule "FreeSO"]
 	path = FreeSO
-	url = https://github.com/riperiperi/FreeSO
+	url = https://github.com/Glamurio/FreeSO
+	branch = simitone

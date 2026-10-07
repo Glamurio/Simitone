@@ -74,6 +74,14 @@ if (-not (Test-Path $FreeSOMarker)) {
     Invoke-Native git @('-C', $RepoRoot, 'submodule', 'update', '--init', '--recursive')
     if ($LASTEXITCODE -ne 0) { Fail 'git submodule update failed.' }
     if (-not (Test-Path $FreeSOMarker)) { Fail 'FreeSO submodule still missing after init.' }
+} elseif (Get-Command git -ErrorAction SilentlyContinue) {
+    # An existing checkout is never changed (it may hold local FreeSO work), but say so when it is not the
+    # commit this Simitone revision expects, e.g. after pulling a branch that moved the submodule.
+    $status = (& git -C $RepoRoot submodule status FreeSO 2>$null | Out-String).Trim()
+    if ($status.StartsWith('+')) {
+        Write-Host 'WARNING: FreeSO is not at the commit this Simitone revision expects. To update it (after committing or' -ForegroundColor Yellow
+        Write-Host '         stashing any FreeSO changes):  git submodule sync FreeSO; git submodule update --init --recursive FreeSO' -ForegroundColor Yellow
+    }
 }
 
 # --- 2. .NET SDK ------------------------------------------------------------------------
