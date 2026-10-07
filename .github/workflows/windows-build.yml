@@ -3,12 +3,14 @@ name: Simitone Windows build
 # Builds Simitone.Windows with the same script developers use locally (tools/build.ps1)
 # and publishes the result as a zip:
 #   - as a workflow artifact (always), and
-#   - as a rolling pre-release named "dev-build-<branch>" (pushes only), so a build can be
-#     downloaded without opening the Actions UI.
+#   - as a rolling pre-release named "dev-build-<branch>", so a build can be downloaded without
+#     opening the Actions UI.
+# Pushes that only add .patches/ are skipped: apply-patches.yml applies them and then starts this
+# workflow with workflow_dispatch (pushes made with GITHUB_TOKEN do not trigger workflows).
 on:
   push:
     branches: ['**']
-    paths-ignore: ['docs/**', '**.md']
+    paths-ignore: ['docs/**', '**.md', '.patches/**']
   workflow_dispatch:
 
 permissions:
@@ -28,8 +30,8 @@ jobs:
           submodules: recursive
 
       # tools/freeso.ref names the FreeSO commit (in github.com/Glamurio/FreeSO) this revision builds
-      # against. If it differs from the FreeSO gitlink, check that commit out and, on pushes, commit the
-      # updated gitlink back to the branch (pushes made with GITHUB_TOKEN do not start another run).
+      # against. If it differs from the FreeSO gitlink, check that commit out and commit the updated
+      # gitlink back to the branch (pushes made with GITHUB_TOKEN do not start another run).
       # This lets the submodule be moved by editing a text file.
       - name: Sync FreeSO submodule to tools/freeso.ref
         id: sync
@@ -46,7 +48,7 @@ jobs:
             git -C FreeSO checkout --detach $want
             if ($LASTEXITCODE -ne 0) { Write-Output "::error title=FreeSO sync failed::cannot check out $want"; exit 1 }
             git -C FreeSO submodule update --init --recursive
-            if ("${{ github.event_name }}" -eq 'push') {
+            if ("${{ github.ref_type }}" -eq 'branch') {
               git add FreeSO
               git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -m "Update FreeSO submodule to $want (from tools/freeso.ref)"
               git push origin "HEAD:refs/heads/${{ github.ref_name }}"
@@ -86,7 +88,7 @@ jobs:
           retention-days: 14
 
       - name: Publish rolling pre-release
-        if: github.event_name == 'push'
+        if: github.ref_type == 'branch'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
