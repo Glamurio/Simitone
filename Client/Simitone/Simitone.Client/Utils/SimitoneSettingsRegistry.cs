@@ -109,6 +109,12 @@ namespace Simitone.Client.Utils
             list.Add(Toggle(SIMULATION, "Action queue fixes",
                 "Queued actions for objects pets can use can be cancelled; fixes a freeze when queueing.",
                 () => S.QueueFixes, (v) => { S.QueueFixes = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Walk around standing Sims",
+                "Plan around Sims standing still, plan again when objects move, retry a blocked door once.",
+                () => S.DynamicObstacles, (v) => { S.DynamicObstacles = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Free stuck Sims",
+                "A Sim squeezed against an object steps out instead of failing every route.",
+                () => S.Unstick, (v) => { S.Unstick = v; SaveS(); }, departure: true));
 
             //--- camera and controls
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",

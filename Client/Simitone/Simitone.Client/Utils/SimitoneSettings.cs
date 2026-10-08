@@ -37,6 +37,8 @@ namespace Simitone.Client.Utils
             { "Shimmy", "true" },
             { "RoutingFixes", "true" },
             { "QueueFixes", "true" },
+            { "DynamicObstacles", "true" },
+            { "Unstick", "true" },
 
             //debugging
             { "Diagnostics", "true" },
@@ -62,6 +64,8 @@ namespace Simitone.Client.Utils
         public bool Shimmy { get; set; }
         public bool RoutingFixes { get; set; }
         public bool QueueFixes { get; set; }
+        public bool DynamicObstacles { get; set; }
+        public bool Unstick { get; set; }
 
         public bool Diagnostics { get; set; }
         public bool DrawRoutes { get; set; }
@@ -83,6 +87,8 @@ namespace Simitone.Client.Utils
             VMFeatures.Shimmy = Shimmy;
             VMFeatures.RoutingFixes = RoutingFixes;
             VMFeatures.QueueFixes = QueueFixes;
+            VMFeatures.DynamicObstacles = DynamicObstacles;
+            VMFeatures.Unstick = Unstick;
             VMFeatures.Diagnostics = Diagnostics;
             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
         }
