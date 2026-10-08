@@ -69,13 +69,19 @@ namespace Simitone.Client.UI.Panels
                     LastMouseWheel = state.MouseState.ScrollWheelValue;
                     ScrollWheelInvalid = false;
                 }
-                if (state.WindowFocused && state.MouseState.ScrollWheelValue != LastMouseWheel)
+                var wheelDiff = (state.WindowFocused && state.MouseState.ScrollWheelValue != LastMouseWheel)
+                    ? state.MouseState.ScrollWheelValue - LastMouseWheel : 0;
+                //a scrollable panel under the mouse (the catalog) takes the wheel instead of the zoom. (roadmap 11)
+                var routed = Simitone.Client.UI.Utils.UIWheelRouting.Route(state.MouseState.Position, wheelDiff);
+                if (wheelDiff != 0)
                 {
-                    var diff = state.MouseState.ScrollWheelValue - LastMouseWheel;
-                    Master.TargetZoom = Master.TargetZoom + diff / 1600f;
+                    if (!routed)
+                    {
+                        Master.TargetZoom = Master.TargetZoom + wheelDiff / 1600f;
+                        Master.TargetZoom = Math.Max(0.25f, Math.Min(Master.TargetZoom, 2));
+                        ZoomFreezeTime = 10;
+                    }
                     LastMouseWheel = state.MouseState.ScrollWheelValue;
-                    Master.TargetZoom = Math.Max(0.25f, Math.Min(Master.TargetZoom, 2));
-                    ZoomFreezeTime = 10;
                 }
             }
 

@@ -46,6 +46,8 @@ namespace Simitone.Client.UI.Screens
         public bool Desktop = !FSOEnvironment.SoftwareKeyboard;
 
         public UILotControl LotControl { get; set; }
+        /// <summary>Keyboard camera shortcuts (roadmap 13); recreated for every lot, so saved views are per lot.</summary>
+        private Simitone.Client.UI.Utils.UICameraShortcuts CameraShortcuts = new Simitone.Client.UI.Utils.UICameraShortcuts();
         public UISimitoneFrontend Frontend { get; set; }
         private FSO.LotView.World World;
         public FSO.SimAntics.VM vm { get; set; }
@@ -174,6 +176,12 @@ namespace Simitone.Client.UI.Screens
 
         public TS1GameScreen(NeighSelectionMode mode) : base()
         {
+            Simitone.Client.Utils.SimitoneSettingsRegistry.WriteDiagnostics = () =>
+            {
+                var path = Simitone.Client.Utils.DiagnosticsWriter.Write(vm);
+                Simitone.Client.UI.Panels.UICheatTextbox.ShowDiagnosticsWritten(path);
+                return path;
+            };
             Bg = new UISimitoneBg();
             Bg.Position = (new Vector2(ScreenWidth, ScreenHeight)) / 2;
             Add(Bg);
@@ -345,19 +353,27 @@ namespace Simitone.Client.UI.Screens
             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
             GameFacade.Game.IsMouseVisible = Visible;
 
-            if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
-            if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
-            if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
-            if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
-            if (state.NewKeys.Contains(Keys.D0))
+            var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
+            if (!typing)
             {
-                //frame advance
-                ChangeSpeedTo(1);
-                GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
+                if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
+                if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
+                if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
+                if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
+                if (state.NewKeys.Contains(Keys.D0))
+                {
+                    //frame advance
+                    ChangeSpeedTo(1);
+                    GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
+                }
             }
             base.Update(state);
 
-            if (state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
+            if (!typing && InLot && Simitone.Client.Utils.SimitoneSettings.Default.CameraShortcuts)
+                CameraShortcuts.Update(state, World, LotControl);
+            if (InLot && LotControl != null) UpdateBuildUndo(state, typing);
+
+            if (!typing && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
             {
                 GraphicsModeControl.ChangeMode((GraphicsModeControl.Mode == GlobalGraphicsMode.Full3D) ? GlobalGraphicsMode.Hybrid2D : GlobalGraphicsMode.Full3D);
             }
@@ -450,9 +466,26 @@ namespace Simitone.Client.UI.Screens
 
         private VMMarshal SavedLot;
 
+        /// <summary>Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) in buy and build mode, while nothing is held. (roadmap 12)</summary>
+        private void UpdateBuildUndo(FSO.Common.Rendering.Framework.Model.UpdateState state, bool typing)
+        {
+            var undo = LotControl.BuildUndo;
+            if (LotControl.LiveMode || !Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo)
+            {
+                undo.Clear();
+                return;
+            }
+            if (typing || !state.CtrlDown || LotControl.ObjectHolder.Holding != null || LotControl.CustomControl != null) return;
+            bool done = false;
+            if (state.NewKeys.Contains(Keys.Z) && !state.ShiftDown) done = undo.Undo(vm);
+            else if (state.NewKeys.Contains(Keys.Y) || (state.NewKeys.Contains(Keys.Z) && state.ShiftDown)) done = undo.Redo(vm);
+            if (done) FSO.HIT.HITVM.Get()?.PlaySoundEvent(FSO.Client.UI.Model.UISounds.ObjectMovePlace);
+        }
+
         public void InitializeLot()
         {
             CleanupLastWorld();
+            CameraShortcuts = new Simitone.Client.UI.Utils.UICameraShortcuts();
             World = new FSO.LotView.World(GameFacade.GraphicsDevice);
 
             World.Opacity = 1;

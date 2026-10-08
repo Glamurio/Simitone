@@ -21,6 +21,8 @@ namespace Simitone.Client.UI.Controls
         public bool DrawBounds = true;
         public int Margin;
         public bool VerticalMode;
+        /// <summary>Scroll with the mouse wheel while the mouse is over this (Simitone catalog setting). See UIWheelRouting.</summary>
+        public bool WheelScroll;
 
         private UIMouseEventRef HitTest;
 
@@ -138,6 +140,9 @@ namespace Simitone.Client.UI.Controls
             }
 
             var length = LengthProvider();
+
+            //one wheel notch (120) moves one item.
+            if (WheelScroll && Visible) Simitone.Client.UI.Utils.UIWheelRouting.Register(this, () => Size, (delta) => Scroll -= delta / 120f * ItemWidth);
 
             //perform scroll and input management.
 

@@ -44,13 +44,22 @@ namespace Simitone.Windows
             else
                 gameLocator = new WindowsLocator();
 
-            var useDX = !linux;
             var path = gameLocator.FindTheSims1();
+            bool pathGiven = false;
 
+            //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
+            //created next to the exe instead of in Documents/Simitone.
+            FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
+            Directory.CreateDirectory(FSOEnvironment.UserDir);
 
-            FSOEnvironment.Enable3D = false;
+            //start-up options come from simitone.ini (Options > Settings); command line switches override them for this run.
+            var startup = Simitone.Client.Utils.SimitoneSettings.Default;
+            var useDX = !linux && startup.UseDirectX;
+            FSOEnvironment.Enable3D = startup.Enable3D;
+            FSOEnvironment.SoftwareKeyboard = startup.TouchUI;
+            FSOEnvironment.NoSound = startup.NoSound;
             bool ide = false;
-            bool aa = false;
+            bool aa = startup.AntiAlias;
             bool jit = false;
             #region User resolution parmeters
 
@@ -99,12 +108,27 @@ namespace Simitone.Windows
                                 break;
                             case string s when s.StartsWith("path"): //The Sims path
                                 path = s.Length > 4 ? s.Substring(4).Trim('"').Replace('\\', '/') + "/" : path;
+                                pathGiven = s.Length > 4;
                                 break;
                         }
                     }
                 }
             }
             #endregion
+            if (path == null || (pathGiven && !GameInstall.IsValid(path)))
+            {
+                //nothing to start with: say why instead of closing silently.
+                MessageBox.Show("Simitone could not find The Sims 1 (no GameData/Behavior.iff in " + (path ?? "any known install location") + ").\n\n" +
+                    "Start Simitone with -path\"C:\\path\\to\\The Sims\" to point it at the game folder " +
+                    "(for Steam: ...\\steamapps\\common\\The Sims Legacy Collection).", "Simitone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            //original-game saves: where the install keeps them (Steam's Legacy Collection keeps them outside the install),
+            //and a requested re-import has to happen before any neighbourhood is loaded.
+            Simitone.Client.Utils.SaveImport.ApplyPending();
+            FSO.Content.TS1.TS1NeighborhoodProvider.SaveImportRoots = GameInstall.SaveRoots(path);
+
             useDX = MonogameLinker.Link(useDX);
 
             FSO.Files.ImageLoaderHelpers.BitmapFunction = BitmapReader;
@@ -117,11 +141,11 @@ namespace Simitone.Windows
             {
                 FSOEnvironment.ContentDir = "Content/";
                 FSOEnvironment.GFXContentDir = "Content/" + (useDX ? "DX/" : "OGL/");
-                FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
-                Directory.CreateDirectory(FSOEnvironment.UserDir);
                 FSOEnvironment.Linux = false;
                 FSOEnvironment.DirectX = useDX;
                 FSOEnvironment.GameThread = Thread.CurrentThread;
+                //never chosen in Simitone: follow the language the installed game was set to.
+                if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = GameInstall.InstalledLanguage();
                 if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = 1;
                 FSO.Files.Formats.IFF.Chunks.STR.DefaultLangCode = (FSO.Files.Formats.IFF.Chunks.STRLangCode)GlobalSettings.Default.LanguageCode;
 
@@ -129,10 +153,10 @@ namespace Simitone.Windows
                 GlobalSettings.Default.TS1HybridEnable = true;
                 GlobalSettings.Default.TS1HybridPath = path;
                 GlobalSettings.Default.ClientVersion = "0";
-                GlobalSettings.Default.LightingMode = 3;
+                GlobalSettings.Default.LightingMode = startup.LightingMode;
                 GlobalSettings.Default.AntiAlias = aa ? 1 : 0;
-                GlobalSettings.Default.ComplexShaders = true;
-                GlobalSettings.Default.EnableTransitions = true;
+                GlobalSettings.Default.ComplexShaders = startup.ComplexShaders;
+                GlobalSettings.Default.EnableTransitions = startup.EnableTransitions;
 
                 if (ide) new FSO.IDE.VolcanicStartProxy().InitVolcanic(args);
 

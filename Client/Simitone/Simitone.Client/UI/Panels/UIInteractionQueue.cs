@@ -8,6 +8,7 @@ using System;
 using System.Collections.Generic;
 using Microsoft.Xna.Framework;
 using FSO.Client.UI.Framework;
+using FSO.Client.UI.Controls;
 using FSO.Client.UI.Model;
 using FSO.Common.Rendering.Framework.Model;
 using FSO.SimAntics.Engine;
@@ -38,6 +39,47 @@ namespace Simitone.Client.UI.Panels
             this.vm = vm;
             this.QueueOwner = QueueOwner;
             QueueItems = new List<UIIQTrackEntry>();
+            Simitone.Client.UI.Utils.UIQueueNotices.Hook();
+        }
+
+        //notes shown under the queue when an action is dropped for a reason the player can't see (roadmap 5).
+        private const int NOTICE_FRAMES = 150;
+        private List<(UILabel label, int frames)> Notices = new List<(UILabel, int)>();
+        private static readonly Color NoticeColor = new Color(255, 220, 140);
+
+        private void ShowDroppedNotice(UIIQTrackEntry itemui)
+        {
+            if (!Simitone.Client.Utils.SimitoneSettings.Default.QueueNotices) return;
+            var text = Simitone.Client.UI.Utils.UIQueueNotices.Take(QueueOwner, itemui.Interaction.UID);
+            if (text == null) return;
+            var label = new UILabel();
+            label.CaptionStyle = label.CaptionStyle.Clone();
+            label.CaptionStyle.Size = 12;
+            label.CaptionStyle.Shadow = true;
+            label.CaptionStyle.Color = NoticeColor;
+            label.Alignment = TextAlignment.Center | TextAlignment.Middle;
+            label.Caption = text;
+            label.Size = new Vector2(160, 20);
+            label.Position = itemui.UI.Position + new Vector2(-80, 30 + Notices.Count * 16);
+            Add(label);
+            Notices.Add((label, NOTICE_FRAMES));
+        }
+
+        private void UpdateNotices()
+        {
+            for (int i = 0; i < Notices.Count; i++)
+            {
+                var (label, frames) = Notices[i];
+                if (--frames <= 0)
+                {
+                    Remove(label);
+                    Notices.RemoveAt(i--);
+                    continue;
+                }
+                //hold, then fade out over the last second.
+                label.CaptionStyle.Color = NoticeColor * Math.Min(1f, frames / 60f);
+                Notices[i] = (label, frames);
+            }
         }
 
         public short GetElemPriority(VMQueuedAction elem, int i)
@@ -50,6 +92,7 @@ namespace Simitone.Client.UI.Panels
         public override void Update(UpdateState state)
         {
             base.Update(state);
+            UpdateNotices();
             if (QueueOwner == null) return;
             //detect any changes in the interaction queue.
 
@@ -109,6 +152,7 @@ namespace Simitone.Client.UI.Panels
                 }
                 if (!found)
                 {
+                    ShowDroppedNotice(itemui);
                     itemui.UI.Kill();
                     QueueItems.RemoveAt(i--); //not here anymore
                 }

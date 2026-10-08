@@ -329,6 +329,15 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
 
         public bool HoldingEvents;
 
+        //catalog search (roadmap 11, SimitoneSettings.CatalogSearch): a search box at the right of the buy catalog.
+        private const int SEARCH_WIDTH = 210;
+        private UITextBox SearchBox;
+        private UILabel SearchLabel;
+        private bool Searching;
+        private bool ClearingSearch;
+        private bool SearchEnabled => Mode != UICatalogMode.Build && Simitone.Client.Utils.SimitoneSettings.Default.CatalogSearch
+            && !FSO.Common.FSOEnvironment.SoftwareKeyboard;
+
         public UIBuyBrowsePanel(TS1GameScreen screen, sbyte category, UICatalogMode mode) : base(screen) {
             CatContainer = new UITouchScroll(() => FilterCategory?.Count() ?? 0, CatalogElemProvider);
             CatContainer.ItemWidth = 90;
@@ -336,10 +345,12 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             CatContainer.Margin = 15;
             CatContainer.SetScroll(-15);
             CatContainer.Size = new Vector2(775, 128);
+            CatContainer.WheelScroll = Simitone.Client.Utils.SimitoneSettings.Default.CatalogSearch;
             Category = category;
 
             Add(CatContainer);
             Mode = mode;
+            if (SearchEnabled) InitSearch();
             GameResized();
 
             InitCategory(category, false);
@@ -476,6 +487,13 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
 
         public void Reset()
         {
+            if (SearchBox != null && Searching)
+            {
+                Searching = false;
+                ClearingSearch = true;
+                SearchBox.CurrentText = "";
+                ClearingSearch = false;
+            }
             GameFacade.Screens.Tween.To(CatContainer, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
             InitCategory(Category, false);
         }
@@ -778,8 +796,71 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
         public override void GameResized()
         {
             base.GameResized();
-            CatContainer.Size = new Vector2(Size.X, 128);
+            var searchWidth = (SearchBox != null) ? SEARCH_WIDTH : 0;
+            CatContainer.Size = new Vector2(Size.X - searchWidth, 128);
+            if (SearchBox != null)
+            {
+                SearchLabel.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 26);
+                SearchBox.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 50);
+            }
             if (ChoosingSub) Reset();
+        }
+
+        private void InitSearch()
+        {
+            SearchLabel = new UILabel();
+            SearchLabel.Caption = "Search the catalog";
+            SearchLabel.CaptionStyle = SearchLabel.CaptionStyle.Clone();
+            SearchLabel.CaptionStyle.Size = 12;
+            SearchLabel.CaptionStyle.Color = UIStyle.Current.Text;
+            Add(SearchLabel);
+
+            SearchBox = new UITextBox();
+            SearchBox.SetSize(SEARCH_WIDTH - 20, 32);
+            SearchBox.MaxChars = 40;
+            SearchBox.FlashOnEmpty = true;
+            SearchBox.OnChange += (elem) => UpdateSearch();
+            Add(SearchBox);
+        }
+
+        private void HideSubButtons()
+        {
+            foreach (var btn in SelButtons)
+                GameFacade.Screens.Tween.To(btn, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
+            foreach (var label in SelLabels)
+                GameFacade.Screens.Tween.To(label, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
+        }
+
+        /// <summary>
+        /// Shows every buy item of this catalog mode (any category) matching the search text, ranked by
+        /// CatalogSearchIndex. Clearing the text goes back to the subcategory choice.
+        /// </summary>
+        private void UpdateSearch()
+        {
+            if (ClearingSearch) return;
+            var query = SearchBox.CurrentText?.Trim() ?? "";
+            if (query.Length == 0)
+            {
+                if (Searching)
+                {
+                    Searching = false;
+                    Reset();
+                }
+                return;
+            }
+            if (ChoosingSub) HideSubButtons();
+            ChoosingSub = false;
+            if (!Searching)
+            {
+                CatContainer.Opacity = 0f;
+                GameFacade.Screens.Tween.To(CatContainer, 0.3f, new Dictionary<string, float>() { { "Opacity", 1f } }, TweenQuad.EaseOut);
+            }
+            Searching = true;
+            //buy catalog categories are 0-7; build objects (doors, windows...) are 8 and up.
+            FilterCategory = Simitone.Client.Utils.CatalogSearchIndex.Find(query, x => x.Category >= 0 && x.Category < 8 && GetSubsort(x) > 0)
+                .Select(x => new UICatalogElement() { Item = x, CalcPrice = (int)x.Price }).ToList();
+            CatContainer.Reset();
+            CatContainer.SetScroll(-15);
         }
 
         public override void Update(UpdateState state)
@@ -867,7 +948,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             }
             else if (index == 8)
             {
-                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item)) > 0);
+                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item)) > 0).ToList();
             }
             else
             {
@@ -876,7 +957,8 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
                 {
                     mask |= 16;
                 }
-                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item) & mask) > 0);
+                //materialised: the catalog row reads items by index (ElementAt), which re-ran this filter every time.
+                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item) & mask) > 0).ToList();
             }
             CatContainer.Reset();
         }

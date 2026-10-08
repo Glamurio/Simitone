@@ -238,6 +238,17 @@ namespace Simitone.Client.UI.Panels
                                 x = pos.x,
                                 y = pos.y
                             });
+                            var real = Holding.RealEnt?.MultitileGroup?.BaseObject;
+                            if (real != null && Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo
+                                && (real.Position != pos || real.Direction != Holding.Dir))
+                            {
+                                ParentControl.BuildUndo.Push(new Simitone.Client.Utils.BuildUndoStack.MoveEntry()
+                                {
+                                    ObjectID = real.ObjectID, GUID = real.MultitileGroup.GUID,
+                                    From = real.Position, FromDir = real.Direction,
+                                    To = new LotTilePos(pos.x, pos.y, pos.Level), ToDir = Holding.Dir
+                                });
+                            }
                         }
                         else
                         {
@@ -269,6 +280,9 @@ namespace Simitone.Client.UI.Panels
                                 x = pos.x,
                                 y = pos.y
                             });
+                            if (Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo)
+                                ParentControl.BuildUndo.Push(new Simitone.Client.Utils.BuildUndoStack.BuyEntry()
+                                    { GUID = GUID, Position = new LotTilePos(pos.x, pos.y, pos.Level), Dir = Holding.Dir });
                         } else
                         {
                             Holding.MoveTarget = Holding.Group.BaseObject.ObjectID;
@@ -336,11 +350,12 @@ namespace Simitone.Client.UI.Panels
             if (Holding != null)
             {
                 if (Roommate) cur = CursorType.SimsPlace;
-                if (state.KeyboardState.IsKeyDown(Keys.Delete))
+                var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
+                if (!typing && state.KeyboardState.IsKeyDown(Keys.Delete))
                 {
                     SellBack(null);
                 }
-                else if (state.KeyboardState.IsKeyDown(Keys.Escape))
+                else if (!typing && state.KeyboardState.IsKeyDown(Keys.Escape))
                 {
                     Cancel();
                 }

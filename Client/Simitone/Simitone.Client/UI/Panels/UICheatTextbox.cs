@@ -77,6 +77,8 @@ namespace Simitone.Client.UI.Panels
                 Visible = !Visible;
             }
             baseTextbox.Visible = Visible;
+            //focus is not cleared when a text box is hidden; release it so hotkeys work again straight away.
+            if (!Visible && state.InputManager?.GetFocus() == baseTextbox) state.InputManager.SetFocus(null);
             if (Visible)
             {
                 if (state.NewKeys.Contains(Keys.Enter))
@@ -141,9 +143,12 @@ namespace Simitone.Client.UI.Panels
         } 
 
         /// <summary>
-        /// Development toggles that only affect this client and are not sent to the VM as cheats:
+        /// Client commands that are not sent to the VM as cheats. The toggles change (and save) the same settings as
+        /// Options > Settings:
         ///   draw_routes [on|off]  - draw route rectangles, paths and shimmy pinches (same name as the original game's cheat)
         ///   shimmy [on|off]       - let Sims side-step through narrow gaps between objects
+        ///   diagnostics [on|off]  - record route events and why actions ended
+        ///   write_routes          - write the diagnostics report to Documents/Simitone/diagnostics
         /// Without on/off the setting is toggled.
         /// </summary>
         private bool tryClientCommand(string commandString)
@@ -156,16 +161,40 @@ namespace Simitone.Client.UI.Panels
                 if (parts[1] == "on") value = true;
                 else if (parts[1] == "off") value = false;
             }
+            var settings = Simitone.Client.Utils.SimitoneSettings.Default;
             switch (parts[0])
             {
                 case "draw_routes":
-                    FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW = value ?? !FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW;
-                    return true;
+                    settings.DrawRoutes = value ?? !settings.DrawRoutes;
+                    break;
                 case "shimmy":
-                    FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled = value ?? !FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled;
+                    settings.Shimmy = value ?? !settings.Shimmy;
+                    break;
+                case "diagnostics":
+                    settings.Diagnostics = value ?? !settings.Diagnostics;
+                    break;
+                case "write_routes":
+                    var path = Simitone.Client.Utils.DiagnosticsWriter.Write(ts1VM);
+                    ShowDiagnosticsWritten(path);
                     return true;
+                default:
+                    return false;
             }
-            return false;
+            settings.Save();
+            settings.ApplyToEngine();
+            return true;
+        }
+
+        public static void ShowDiagnosticsWritten(string path)
+        {
+            Simitone.Client.UI.Panels.UIMobileAlert alert = null;
+            alert = new Simitone.Client.UI.Panels.UIMobileAlert(new UIAlertOptions()
+            {
+                Title = "Diagnostics",
+                Message = (path != null) ? ("Report written to:\n" + path) : "No lot is loaded, or the report could not be written.",
+                Buttons = UIAlertButton.Ok((b) => alert.Close())
+            });
+            UIScreen.GlobalShowDialog(alert, true);
         }
 
         private String trimRepetitions(string input)

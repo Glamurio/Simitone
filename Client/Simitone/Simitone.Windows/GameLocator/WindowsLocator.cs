@@ -38,32 +38,38 @@ namespace Simitone.Windows.GameLocator
 
         public string FindTheSims1()
         {
-            // Search relative directory similar to how macOS and Linux works; allows portability
-            string localDir = @"../The Sims/";
-            if (File.Exists(Path.Combine(localDir, "GameData", "Behavior.iff"))) return localDir;
-
-            using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
+            //every candidate must actually hold the game data: a stale registry key (uninstalled or moved game) used to
+            //win over a working Steam install. Order is unchanged otherwise: next to the exe, classic registry key, Steam.
+            foreach (var candidate in Candidates())
             {
-                //Find the path to TS1 on the user's system.
-                RegistryKey softwareKey = hklm.OpenSubKey("SOFTWARE");
+                if (GameInstall.IsValid(candidate)) return candidate;
+            }
+            return null; //Program reports it.
+        }
 
-                if (Array.Exists(softwareKey.GetSubKeyNames(), delegate (string s) { return s.Equals("Maxis", StringComparison.InvariantCultureIgnoreCase); }))
+        private IEnumerable<string> Candidates()
+        {
+            // Search relative directory similar to how macOS and Linux works; allows portability
+            yield return @"../The Sims/";
+
+            string registered = null;
+            try
+            {
+                using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
+                using (var key = hklm.OpenSubKey(@"SOFTWARE\Maxis\The Sims"))
                 {
-                    RegistryKey maxisKey = softwareKey.OpenSubKey("Maxis");
-                    if (Array.Exists(maxisKey.GetSubKeyNames(), delegate (string s) { return s.Equals("The Sims", StringComparison.InvariantCultureIgnoreCase); }))
-                    {
-                        RegistryKey tsoKey = maxisKey.OpenSubKey("The Sims");
-                        string installDir = (string)tsoKey.GetValue("InstallPath");
-                        installDir += "\\";
-                        return installDir.Replace('\\', '/');
-                    }
+                    var dir = key?.GetValue("InstallPath") as string;
+                    if (!string.IsNullOrEmpty(dir)) registered = dir.TrimEnd('\\', '/').Replace('\\', '/') + "/";
                 }
             }
-            // Check for Steam Legacy Collection install
-            if (FindTheSimsLegacySteam() is string steamInstallDir) return steamInstallDir;
+            catch (Exception) { }
+            if (registered != null) yield return registered;
 
-            // Fall back to the default install location if the other two checks fail
-            return @"C:\Program Files (x86)\Maxis\The Sims\".Replace('\\', '/');
+            // Steam Legacy Collection install
+            var steam = FindTheSimsLegacySteam();
+            if (steam != null) yield return steam;
+
+            yield return @"C:\Program Files (x86)\Maxis\The Sims\".Replace('\\', '/');
         }
 
         /// <summary>

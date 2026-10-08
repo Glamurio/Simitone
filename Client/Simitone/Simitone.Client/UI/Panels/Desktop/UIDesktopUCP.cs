@@ -326,8 +326,8 @@ namespace Simitone.Client.UI.Panels.Desktop
 
             //KEY SHORTCUTS
             var keys = state.NewKeys;
-            var nofocus = true;
-            if (Game.InLot)
+            var nofocus = !Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
+            if (Game.InLot && nofocus)
             {
                 if (keys.Contains(Keys.F1) && !LiveButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.LIVE);
                 if (keys.Contains(Keys.F2) && !BuyButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUY);
