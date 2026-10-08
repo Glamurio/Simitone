@@ -39,6 +39,18 @@ namespace Simitone.Client.Utils
             { "QueueFixes", "true" },
             { "DynamicObstacles", "true" },
             { "Unstick", "true" },
+            { "ApproachPositions", "true" },
+            { "ObjectSelection", "true" },
+            { "AutonomyFixes", "true" },
+            { "AutonomyCountOnce", "true" },
+            { "QueueRecovery", "true" },
+            { "Conversations", "true" },
+
+            //interface
+            { "QueueNotices", "true" },
+            { "CameraShortcuts", "true" },
+            { "CatalogSearch", "true" },
+            { "BuildUndo", "true" },
 
             //debugging
             { "Diagnostics", "true" },
@@ -66,6 +78,17 @@ namespace Simitone.Client.Utils
         public bool QueueFixes { get; set; }
         public bool DynamicObstacles { get; set; }
         public bool Unstick { get; set; }
+        public bool ApproachPositions { get; set; }
+        public bool ObjectSelection { get; set; }
+        public bool AutonomyFixes { get; set; }
+        public bool AutonomyCountOnce { get; set; }
+        public bool QueueRecovery { get; set; }
+        public bool Conversations { get; set; }
+
+        public bool QueueNotices { get; set; }
+        public bool CameraShortcuts { get; set; }
+        public bool CatalogSearch { get; set; }
+        public bool BuildUndo { get; set; }
 
         public bool Diagnostics { get; set; }
         public bool DrawRoutes { get; set; }
@@ -89,6 +112,12 @@ namespace Simitone.Client.Utils
             VMFeatures.QueueFixes = QueueFixes;
             VMFeatures.DynamicObstacles = DynamicObstacles;
             VMFeatures.Unstick = Unstick;
+            VMFeatures.ApproachPositions = ApproachPositions;
+            VMFeatures.ObjectSelection = ObjectSelection;
+            VMFeatures.AutonomyFixes = AutonomyFixes;
+            VMFeatures.AutonomyCountOnce = AutonomyCountOnce;
+            VMFeatures.QueueRecovery = QueueRecovery;
+            VMFeatures.Conversations = Conversations;
             VMFeatures.Diagnostics = Diagnostics;
             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
         }

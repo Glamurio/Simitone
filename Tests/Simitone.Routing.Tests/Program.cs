@@ -13,7 +13,8 @@ namespace Simitone.Routing.Tests
         {
             int failed = 0, total = 0;
             var tests = ShimmyPlannerTests.All()
-                .Concat(DiagnosticsTests.All());
+                .Concat(DiagnosticsTests.All())
+                .Concat(SelectionTests.All());
             foreach (var (name, test) in tests)
             {
                 total++;

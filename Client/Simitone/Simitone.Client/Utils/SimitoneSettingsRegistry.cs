@@ -38,7 +38,7 @@ namespace Simitone.Client.Utils
     public static class SimitoneSettingsRegistry
     {
         public const string SIMULATION = "Simulation";
-        public const string CONTROLS = "Camera & Controls";
+        public const string CONTROLS = "Interface";
         public const string SOUND = "Sound";
         public const string DISPLAY = "Display";
         public const string DEBUG = "Debug";
@@ -115,10 +115,40 @@ namespace Simitone.Client.Utils
             list.Add(Toggle(SIMULATION, "Free stuck Sims",
                 "A Sim squeezed against an object steps out instead of failing every route.",
                 () => S.Unstick, (v) => { S.Unstick = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Smarter approach positions",
+                "Skip seats someone sits in; re-check the other spots when one fails.",
+                () => S.ApproachPositions, (v) => { S.ApproachPositions = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Avoid unreachable objects",
+                "When a task needs an object, prefer reachable ones that did not just fail.",
+                () => S.ObjectSelection, (v) => { S.ObjectSelection = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Free will fixes",
+                "Free will respects object cooldowns and avoids unreachable or failed objects.",
+                () => S.AutonomyFixes, (v) => { S.AutonomyFixes = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Free will: count each action once",
+                "Balance change: actions with several menu entries no longer get extra chances.",
+                () => S.AutonomyCountOnce, (v) => { S.AutonomyCountOnce = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Keep the queue when an object vanishes",
+                "Only the action on a deleted object is dropped, not the whole queue.",
+                () => S.QueueRecovery, (v) => { S.QueueRecovery = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Respect conversations",
+                "Free will waits for chatting Sims instead of shooing them; follow Sims who walk off.",
+                () => S.Conversations, (v) => { S.Conversations = v; SaveS(); }, departure: true));
 
             //--- camera and controls
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
                 () => G.EdgeScroll, (v) => { G.EdgeScroll = v; G.Save(); }));
+            list.Add(Toggle(CONTROLS, "Camera shortcuts",
+                "Arrows pan, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).",
+                () => S.CameraShortcuts, (v) => { S.CameraShortcuts = v; S.Save(); }, departure: true));
+            list.Add(Toggle(CONTROLS, "Catalog search and wheel scrolling",
+                "Search box in the buy catalog; the mouse wheel scrolls the catalog when over it. Reopen the catalog to apply.",
+                () => S.CatalogSearch, (v) => { S.CatalogSearch = v; S.Save(); }, departure: true));
+            list.Add(Toggle(CONTROLS, "Undo in buy and build mode",
+                "Ctrl+Z undoes buying, moving and rotating objects (full refund), Ctrl+Y redoes. Cleared in live mode.",
+                () => S.BuildUndo, (v) => { S.BuildUndo = v; S.Save(); }, departure: true));
+            list.Add(Toggle(CONTROLS, "Say why actions were dropped",
+                "A short note under the queue when an action is dropped (can't start, object gone).",
+                () => S.QueueNotices, (v) => { S.QueueNotices = v; S.Save(); }, departure: true));
 
             //--- sound
             list.Add(Volume("Music volume", () => G.MusicVolume, (v) => G.MusicVolume = (byte)v, HITVolumeGroup.MUSIC));

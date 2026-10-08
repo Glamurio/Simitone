@@ -74,6 +74,8 @@ namespace Simitone.Client.UI.Panels
         public UIInteractionQueue Queue;
 
         public bool LiveMode = true;
+        /// <summary>Buy/build undo history for this lot (roadmap 12); cleared on returning to live mode.</summary>
+        public Simitone.Client.Utils.BuildUndoStack BuildUndo = new Simitone.Client.Utils.BuildUndoStack();
         public bool PanelActive = false;
         public UILotControlTouchHelper Touch;
         public UIArchTouchHelper ArchTouch;
