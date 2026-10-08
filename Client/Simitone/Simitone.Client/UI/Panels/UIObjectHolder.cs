@@ -336,11 +336,12 @@ namespace Simitone.Client.UI.Panels
             if (Holding != null)
             {
                 if (Roommate) cur = CursorType.SimsPlace;
-                if (state.KeyboardState.IsKeyDown(Keys.Delete))
+                var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
+                if (!typing && state.KeyboardState.IsKeyDown(Keys.Delete))
                 {
                     SellBack(null);
                 }
-                else if (state.KeyboardState.IsKeyDown(Keys.Escape))
+                else if (!typing && state.KeyboardState.IsKeyDown(Keys.Escape))
                 {
                     Cancel();
                 }

@@ -44,13 +44,21 @@ namespace Simitone.Windows
             else
                 gameLocator = new WindowsLocator();
 
-            var useDX = !linux;
             var path = gameLocator.FindTheSims1();
 
+            //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
+            //created next to the exe instead of in Documents/Simitone.
+            FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
+            Directory.CreateDirectory(FSOEnvironment.UserDir);
 
-            FSOEnvironment.Enable3D = false;
+            //start-up options come from simitone.ini (Options > Settings); command line switches override them for this run.
+            var startup = Simitone.Client.Utils.SimitoneSettings.Default;
+            var useDX = !linux && startup.UseDirectX;
+            FSOEnvironment.Enable3D = startup.Enable3D;
+            FSOEnvironment.SoftwareKeyboard = startup.TouchUI;
+            FSOEnvironment.NoSound = startup.NoSound;
             bool ide = false;
-            bool aa = false;
+            bool aa = startup.AntiAlias;
             bool jit = false;
             #region User resolution parmeters
 
@@ -117,8 +125,6 @@ namespace Simitone.Windows
             {
                 FSOEnvironment.ContentDir = "Content/";
                 FSOEnvironment.GFXContentDir = "Content/" + (useDX ? "DX/" : "OGL/");
-                FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
-                Directory.CreateDirectory(FSOEnvironment.UserDir);
                 FSOEnvironment.Linux = false;
                 FSOEnvironment.DirectX = useDX;
                 FSOEnvironment.GameThread = Thread.CurrentThread;
@@ -129,10 +135,10 @@ namespace Simitone.Windows
                 GlobalSettings.Default.TS1HybridEnable = true;
                 GlobalSettings.Default.TS1HybridPath = path;
                 GlobalSettings.Default.ClientVersion = "0";
-                GlobalSettings.Default.LightingMode = 3;
+                GlobalSettings.Default.LightingMode = startup.LightingMode;
                 GlobalSettings.Default.AntiAlias = aa ? 1 : 0;
-                GlobalSettings.Default.ComplexShaders = true;
-                GlobalSettings.Default.EnableTransitions = true;
+                GlobalSettings.Default.ComplexShaders = startup.ComplexShaders;
+                GlobalSettings.Default.EnableTransitions = startup.EnableTransitions;
 
                 if (ide) new FSO.IDE.VolcanicStartProxy().InitVolcanic(args);
 

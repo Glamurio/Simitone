@@ -240,6 +240,7 @@ namespace Simitone.Client.UI.Panels
                     panel = new UIButtonSubpanel(Game, new UICatFunc[] {
                         new UICatFunc(GameFacade.Strings.GetString("145", "3"), "opt_save.png", () => { Game.Save(); }),
                         new UICatFunc(GameFacade.Strings.GetString("145", "1"), "opt_neigh.png", () => { Game.ReturnToNeighbourhood(); }),
+                        new UICatFunc("Settings", "opt_settings.png", () => { UIScreen.GlobalShowDialog(new UISettingsDialog(), true); }),
                         new UICatFunc(GameFacade.Strings.GetString("145", "5"), "opt_quit.png", () => { Game.CloseAttempt(); }),
                     });
                     break;

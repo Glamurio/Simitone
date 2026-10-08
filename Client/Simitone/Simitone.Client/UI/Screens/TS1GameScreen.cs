@@ -174,6 +174,12 @@ namespace Simitone.Client.UI.Screens
 
         public TS1GameScreen(NeighSelectionMode mode) : base()
         {
+            Simitone.Client.Utils.SimitoneSettingsRegistry.WriteDiagnostics = () =>
+            {
+                var path = Simitone.Client.Utils.DiagnosticsWriter.Write(vm);
+                Simitone.Client.UI.Panels.UICheatTextbox.ShowDiagnosticsWritten(path);
+                return path;
+            };
             Bg = new UISimitoneBg();
             Bg.Position = (new Vector2(ScreenWidth, ScreenHeight)) / 2;
             Add(Bg);
@@ -345,19 +351,23 @@ namespace Simitone.Client.UI.Screens
             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
             GameFacade.Game.IsMouseVisible = Visible;
 
-            if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
-            if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
-            if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
-            if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
-            if (state.NewKeys.Contains(Keys.D0))
+            var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
+            if (!typing)
             {
-                //frame advance
-                ChangeSpeedTo(1);
-                GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
+                if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
+                if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
+                if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
+                if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
+                if (state.NewKeys.Contains(Keys.D0))
+                {
+                    //frame advance
+                    ChangeSpeedTo(1);
+                    GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
+                }
             }
             base.Update(state);
 
-            if (state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
+            if (!typing && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
             {
                 GraphicsModeControl.ChangeMode((GraphicsModeControl.Mode == GlobalGraphicsMode.Full3D) ? GlobalGraphicsMode.Hybrid2D : GlobalGraphicsMode.Full3D);
             }

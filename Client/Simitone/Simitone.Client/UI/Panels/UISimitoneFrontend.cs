@@ -227,7 +227,8 @@ namespace Simitone.Client.UI.Panels
         public float ClockTween;
         public override void Update(UpdateState state)
         {
-            if (state.NewKeys.Contains(Keys.Space))
+            if (state.NewKeys.Contains(Keys.Space) && !Simitone.Client.UI.Utils.UITextFocus.IsTyping(state)
+                && Game.vm?.TS1State?.CurrentFamily != null) //no family on lots visited without one
             {
                 var selected = Game.LotControl.ActiveEntity;
                 var familyMembers = Game.vm.Context.ObjectQueries.Avatars.Where(x =>

@@ -133,6 +133,7 @@ namespace Simitone.Client
             if (FSOEnvironment.Enable3D) FSO.Files.RC.DGRP3DMesh.InitRCWorkers();
             //FSO.Content.Content.Init(GlobalSettings.Default.StartupPath, GraphicsDevice);
             FSO.SimAntics.VMAvatar.MissingIconProvider = Simitone.Client.UI.Model.UIIconCache.GetObject;
+            Simitone.Client.Utils.SimitoneSettings.Default.ApplyToEngine();
             base.Initialize();
 
             GameFacade.GameThread = Thread.CurrentThread;

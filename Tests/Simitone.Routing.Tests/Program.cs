@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 
 namespace Simitone.Routing.Tests
 {
@@ -11,7 +12,9 @@ namespace Simitone.Routing.Tests
         public static int Main(string[] args)
         {
             int failed = 0, total = 0;
-            foreach (var (name, test) in ShimmyPlannerTests.All())
+            var tests = ShimmyPlannerTests.All()
+                .Concat(DiagnosticsTests.All());
+            foreach (var (name, test) in tests)
             {
                 total++;
                 try
