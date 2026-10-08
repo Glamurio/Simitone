@@ -1,0 +1,1091 @@
+From d6c8805a9597ed00596848ba099bf70c35fcc325 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 18:01:50 +0200
+Subject: [PATCH 1/4] Settings dialog, simitone.ini, diagnostics report, hotkey
+ focus guard
+
+- SimitoneSettings (Documents/Simitone/simitone.ini): Simitone's own
+  switches (shimmy, diagnostics, draw routes) and start-up options that
+  used to be command line only (3D, renderer, anti-aliasing, touch UI,
+  no sound, lighting, shaders, transitions). Switches are pushed into
+  SimAntics VMFeatures at start and on every change.
+- Options > Settings (new gear button) opens UISettingsDialog: sections
+  Simulation / Camera & Controls / Sound / Display / Debug, with paging.
+  It also exposes the existing FreeSO settings Simitone uses (volumes,
+  edge scroll, fullscreen, frame rate, language). Changes save at once;
+  ones that need a restart are marked and the dialog says so.
+- Program.cs reads the start-up options from simitone.ini; command line
+  switches still win. The user folder is now set before GlobalSettings
+  is first read, so -lang/-hz no longer put config.ini next to the exe.
+- Diagnostics report: write_routes cheat or Settings > Debug writes
+  Documents/Simitone/diagnostics/diagnostics-<time>.txt. The cheat box
+  toggles (shimmy, draw_routes, new: diagnostics) now change and save the
+  same settings.
+- Hotkeys (speed keys, Space, F1-F4, camera keys, Delete/Escape while
+  holding an object) are ignored while a visible text field has focus;
+  the cheat box releases focus when hidden. Space no longer throws on a
+  lot without a family.
+- Tests: ring buffer test; the runner runs several suites.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019q6m8f542cVUMKg755aFtZ
+---
+ .../uigraphics/live/modes/opt_settings.png    | Bin 0 -> 1760 bytes
+ .../Simitone.Client/Simitone.Client.csproj    |   3 +
+ .../Simitone/Simitone.Client/SimitoneGame.cs  |   1 +
+ .../UI/Controls/UIFlatButton.cs               | 100 +++++++++
+ .../UI/Panels/Desktop/UIDesktopUCP.cs         |   4 +-
+ .../UI/Panels/UICheatTextbox.cs               |  39 +++-
+ .../Simitone.Client/UI/Panels/UIMainPanel.cs  |   1 +
+ .../UI/Panels/UIObjectHolder.cs               |   5 +-
+ .../UI/Panels/UISettingsDialog.cs             | 194 ++++++++++++++++++
+ .../UI/Panels/UISimitoneFrontend.cs           |   3 +-
+ .../UI/Screens/TS1GameScreen.cs               |  28 ++-
+ .../Simitone.Client/UI/Utils/UITextFocus.cs   |  39 ++++
+ .../Utils/DiagnosticsWriter.cs                |  33 +++
+ .../Simitone.Client/Utils/SimitoneSettings.cs |  84 ++++++++
+ .../Utils/SimitoneSettingsRegistry.cs         | 183 +++++++++++++++++
+ Client/Simitone/Simitone.Windows/Program.cs   |  22 +-
+ .../DiagnosticsTests.cs                       |  29 +++
+ Tests/Simitone.Routing.Tests/Program.cs       |   5 +-
+ 18 files changed, 745 insertions(+), 28 deletions(-)
+ create mode 100644 Client/Simitone/Simitone.Client/Content/uigraphics/live/modes/opt_settings.png
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Controls/UIFlatButton.cs
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Utils/UITextFocus.cs
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/DiagnosticsWriter.cs
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+ create mode 100644 Tests/Simitone.Routing.Tests/DiagnosticsTests.cs
+
+diff --git a/Client/Simitone/Simitone.Client/Content/uigraphics/live/modes/opt_settings.png b/Client/Simitone/Simitone.Client/Content/uigraphics/live/modes/opt_settings.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..84aa974c903662ecebe13253ea7d8af22870202d
+GIT binary patch
+literal 1760
+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
+CCQ7mZ
+
+literal 0
+HcmV?d00001
+
+diff --git a/Client/Simitone/Simitone.Client/Simitone.Client.csproj b/Client/Simitone/Simitone.Client/Simitone.Client.csproj
+index 1e2baf0..6ab4550 100644
+--- a/Client/Simitone/Simitone.Client/Simitone.Client.csproj
++++ b/Client/Simitone/Simitone.Client/Simitone.Client.csproj
+@@ -470,6 +470,9 @@
+     <Content Include="Content\uigraphics\live\modes\opt_quit.png">
+       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+     </Content>
++    <Content Include="Content\uigraphics\live\modes\opt_settings.png">
++      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
++    </Content>
+     <Content Include="Content\uigraphics\live\modes\opt_save.png">
+       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+     </Content>
+diff --git a/Client/Simitone/Simitone.Client/SimitoneGame.cs b/Client/Simitone/Simitone.Client/SimitoneGame.cs
+index 52ca85b..94219ee 100644
+--- a/Client/Simitone/Simitone.Client/SimitoneGame.cs
++++ b/Client/Simitone/Simitone.Client/SimitoneGame.cs
+@@ -133,6 +133,7 @@ namespace Simitone.Client
+             if (FSOEnvironment.Enable3D) FSO.Files.RC.DGRP3DMesh.InitRCWorkers();
+             //FSO.Content.Content.Init(GlobalSettings.Default.StartupPath, GraphicsDevice);
+             FSO.SimAntics.VMAvatar.MissingIconProvider = Simitone.Client.UI.Model.UIIconCache.GetObject;
++            Simitone.Client.Utils.SimitoneSettings.Default.ApplyToEngine();
+             base.Initialize();
+ 
+             GameFacade.GameThread = Thread.CurrentThread;
+diff --git a/Client/Simitone/Simitone.Client/UI/Controls/UIFlatButton.cs b/Client/Simitone/Simitone.Client/UI/Controls/UIFlatButton.cs
+new file mode 100644
+index 0000000..37f0afc
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Controls/UIFlatButton.cs
+@@ -0,0 +1,100 @@
++using FSO.Client;
++using FSO.Client.UI.Controls;
++using FSO.Client.UI.Framework;
++using FSO.Client.UI.Model;
++using FSO.Common.Rendering.Framework.IO;
++using FSO.Common.Rendering.Framework.Model;
++using FSO.Common.Utils;
++using Microsoft.Xna.Framework;
++using Microsoft.Xna.Framework.Graphics;
++using Simitone.Client.UI.Model;
++using System;
++
++namespace Simitone.Client.UI.Controls
++{
++    /// <summary>
++    /// A plain rectangular text button, drawn without textures. Used where Simitone's large image buttons don't fit,
++    /// such as rows of options in the settings dialog.
++    /// </summary>
++    public class UIFlatButton : UIContainer
++    {
++        public event Action<UIFlatButton> OnClick;
++        public bool Selected;
++        public bool Disabled;
++
++        private Vector2 BSize;
++        private UILabel Label;
++        private Texture2D Px;
++        private UIMouseEventRef MouseRef;
++        private bool Hover;
++        private bool Down;
++
++        public string Caption
++        {
++            get { return Label.Caption; }
++            set { Label.Caption = value; }
++        }
++
++        public Vector2 ButtonSize
++        {
++            get { return BSize; }
++            set
++            {
++                BSize = value;
++                Label.Size = value;
++                if (MouseRef != null) MouseRef.Region = new Rectangle(0, 0, (int)value.X, (int)value.Y);
++            }
++        }
++
++        public UIFlatButton(string caption, Vector2 size, int fontSize = 15)
++        {
++            Px = TextureGenerator.GetPxWhite(GameFacade.GraphicsDevice);
++            Label = new UILabel();
++            Label.CaptionStyle = Label.CaptionStyle.Clone();
++            Label.CaptionStyle.Size = fontSize;
++            Label.CaptionStyle.Color = UIStyle.Current.Text;
++            Label.Alignment = TextAlignment.Center | TextAlignment.Middle;
++            Label.Caption = caption;
++            Add(Label);
++            MouseRef = ListenForMouse(new Rectangle(0, 0, (int)size.X, (int)size.Y), OnMouse);
++            ButtonSize = size;
++        }
++
++        private void OnMouse(UIMouseEventType type, UpdateState state)
++        {
++            switch (type)
++            {
++                case UIMouseEventType.MouseOver:
++                    Hover = true;
++                    break;
++                case UIMouseEventType.MouseOut:
++                    Hover = false;
++                    Down = false;
++                    break;
++                case UIMouseEventType.MouseDown:
++                    Down = true;
++                    break;
++                case UIMouseEventType.MouseUp:
++                    if (Down && Hover && !Disabled)
++                    {
++                        FSO.HIT.HITVM.Get()?.PlaySoundEvent(UISounds.Click);
++                        OnClick?.Invoke(this);
++                    }
++                    Down = false;
++                    break;
++            }
++        }
++
++        public override void Draw(UISpriteBatch batch)
++        {
++            if (!Visible) return;
++            Color back;
++            if (Selected) back = UIStyle.Current.SecondaryText * (Hover ? 0.8f : 0.6f);
++            else if (Disabled) back = Color.White * 0.05f;
++            else back = Color.White * (Down ? 0.35f : (Hover ? 0.25f : 0.12f));
++            DrawLocalTexture(batch, Px, null, Vector2.Zero, BSize, back);
++            Label.CaptionStyle.Color = Disabled ? UIStyle.Current.BtnDisable : UIStyle.Current.Text;
++            base.Draw(batch);
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/Desktop/UIDesktopUCP.cs b/Client/Simitone/Simitone.Client/UI/Panels/Desktop/UIDesktopUCP.cs
+index 74602ab..8667c50 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/Desktop/UIDesktopUCP.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/Desktop/UIDesktopUCP.cs
+@@ -326,8 +326,8 @@ namespace Simitone.Client.UI.Panels.Desktop
+ 
+             //KEY SHORTCUTS
+             var keys = state.NewKeys;
+-            var nofocus = true;
+-            if (Game.InLot)
++            var nofocus = !Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
++            if (Game.InLot && nofocus)
+             {
+                 if (keys.Contains(Keys.F1) && !LiveButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.LIVE);
+                 if (keys.Contains(Keys.F2) && !BuyButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUY);
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UICheatTextbox.cs b/Client/Simitone/Simitone.Client/UI/Panels/UICheatTextbox.cs
+index 0bcc9ad..59bbfcf 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UICheatTextbox.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UICheatTextbox.cs
+@@ -77,6 +77,8 @@ namespace Simitone.Client.UI.Panels
+                 Visible = !Visible;
+             }
+             baseTextbox.Visible = Visible;
++            //focus is not cleared when a text box is hidden; release it so hotkeys work again straight away.
++            if (!Visible && state.InputManager?.GetFocus() == baseTextbox) state.InputManager.SetFocus(null);
+             if (Visible)
+             {
+                 if (state.NewKeys.Contains(Keys.Enter))
+@@ -141,9 +143,12 @@ namespace Simitone.Client.UI.Panels
+         } 
+ 
+         /// <summary>
+-        /// Development toggles that only affect this client and are not sent to the VM as cheats:
++        /// Client commands that are not sent to the VM as cheats. The toggles change (and save) the same settings as
++        /// Options > Settings:
+         ///   draw_routes [on|off]  - draw route rectangles, paths and shimmy pinches (same name as the original game's cheat)
+         ///   shimmy [on|off]       - let Sims side-step through narrow gaps between objects
++        ///   diagnostics [on|off]  - record route events and why actions ended
++        ///   write_routes          - write the diagnostics report to Documents/Simitone/diagnostics
+         /// Without on/off the setting is toggled.
+         /// </summary>
+         private bool tryClientCommand(string commandString)
+@@ -156,16 +161,40 @@ namespace Simitone.Client.UI.Panels
+                 if (parts[1] == "on") value = true;
+                 else if (parts[1] == "off") value = false;
+             }
++            var settings = Simitone.Client.Utils.SimitoneSettings.Default;
+             switch (parts[0])
+             {
+                 case "draw_routes":
+-                    FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW = value ?? !FSO.SimAntics.Engine.VMRoutingFrame.DEBUG_DRAW;
+-                    return true;
++                    settings.DrawRoutes = value ?? !settings.DrawRoutes;
++                    break;
+                 case "shimmy":
+-                    FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled = value ?? !FSO.SimAntics.Engine.Routing.VMShimmyPlanner.Enabled;
++                    settings.Shimmy = value ?? !settings.Shimmy;
++                    break;
++                case "diagnostics":
++                    settings.Diagnostics = value ?? !settings.Diagnostics;
++                    break;
++                case "write_routes":
++                    var path = Simitone.Client.Utils.DiagnosticsWriter.Write(ts1VM);
++                    ShowDiagnosticsWritten(path);
+                     return true;
++                default:
++                    return false;
+             }
+-            return false;
++            settings.Save();
++            settings.ApplyToEngine();
++            return true;
++        }
++
++        public static void ShowDiagnosticsWritten(string path)
++        {
++            Simitone.Client.UI.Panels.UIMobileAlert alert = null;
++            alert = new Simitone.Client.UI.Panels.UIMobileAlert(new UIAlertOptions()
++            {
++                Title = "Diagnostics",
++                Message = (path != null) ? ("Report written to:\n" + path) : "No lot is loaded, or the report could not be written.",
++                Buttons = UIAlertButton.Ok((b) => alert.Close())
++            });
++            UIScreen.GlobalShowDialog(alert, true);
+         }
+ 
+         private String trimRepetitions(string input)
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UIMainPanel.cs b/Client/Simitone/Simitone.Client/UI/Panels/UIMainPanel.cs
+index 1d98575..6349513 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UIMainPanel.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UIMainPanel.cs
+@@ -240,6 +240,7 @@ namespace Simitone.Client.UI.Panels
+                     panel = new UIButtonSubpanel(Game, new UICatFunc[] {
+                         new UICatFunc(GameFacade.Strings.GetString("145", "3"), "opt_save.png", () => { Game.Save(); }),
+                         new UICatFunc(GameFacade.Strings.GetString("145", "1"), "opt_neigh.png", () => { Game.ReturnToNeighbourhood(); }),
++                        new UICatFunc("Settings", "opt_settings.png", () => { UIScreen.GlobalShowDialog(new UISettingsDialog(), true); }),
+                         new UICatFunc(GameFacade.Strings.GetString("145", "5"), "opt_quit.png", () => { Game.CloseAttempt(); }),
+                     });
+                     break;
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs b/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
+index 457dbc7..f49aae5 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
+@@ -336,11 +336,12 @@ namespace Simitone.Client.UI.Panels
+             if (Holding != null)
+             {
+                 if (Roommate) cur = CursorType.SimsPlace;
+-                if (state.KeyboardState.IsKeyDown(Keys.Delete))
++                var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
++                if (!typing && state.KeyboardState.IsKeyDown(Keys.Delete))
+                 {
+                     SellBack(null);
+                 }
+-                else if (state.KeyboardState.IsKeyDown(Keys.Escape))
++                else if (!typing && state.KeyboardState.IsKeyDown(Keys.Escape))
+                 {
+                     Cancel();
+                 }
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs b/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
+new file mode 100644
+index 0000000..1ec81fc
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
+@@ -0,0 +1,194 @@
++using FSO.Client;
++using FSO.Client.UI.Controls;
++using FSO.Client.UI.Framework;
++using Microsoft.Xna.Framework;
++using Simitone.Client.UI.Controls;
++using Simitone.Client.UI.Model;
++using Simitone.Client.Utils;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Client.UI.Panels
++{
++    /// <summary>
++    /// Options > Settings. Lists every SimitoneSettingsRegistry entry by section, with paging when a section has more
++    /// rows than fit. Changes apply and save immediately; settings that need a restart say so.
++    /// </summary>
++    public class UISettingsDialog : UIMobileDialog
++    {
++        private const int ROW_HEIGHT = 58;
++        private const int TOP = 100;
++
++        private List<SimitoneSettingDef> Settings;
++        private string Section = SimitoneSettingsRegistry.SIMULATION;
++        private int Page;
++
++        private UIContainer TabBar;
++        private UIContainer Rows;
++        private UIFlatButton PrevPage;
++        private UIFlatButton NextPage;
++        private UILabel PageLabel;
++        private UILabel Notice;
++        private UIBigButton CloseButton;
++        private bool RestartPending;
++
++        private int ContentWidth => Math.Min(Width - 80, 960);
++        private int ContentX => (Width - ContentWidth) / 2;
++        private int RowsPerPage => Math.Max(3, (Height - TOP - 190) / ROW_HEIGHT);
++
++        public UISettingsDialog()
++        {
++            Caption = "Settings";
++            Settings = SimitoneSettingsRegistry.All();
++
++            TabBar = new UIContainer();
++            Add(TabBar);
++            Rows = new UIContainer();
++            Add(Rows);
++
++            PrevPage = new UIFlatButton("Previous", new Vector2(140, 36));
++            PrevPage.OnClick += (b) => { Page--; Refresh(); };
++            Add(PrevPage);
++            NextPage = new UIFlatButton("Next", new Vector2(140, 36));
++            NextPage.OnClick += (b) => { Page++; Refresh(); };
++            Add(NextPage);
++            PageLabel = MakeLabel(15, UIStyle.Current.Text);
++            PageLabel.Alignment = TextAlignment.Center | TextAlignment.Middle;
++            Add(PageLabel);
++
++            Notice = MakeLabel(15, UIStyle.Current.SecondaryText);
++            Notice.Alignment = TextAlignment.Left | TextAlignment.Middle;
++            Add(Notice);
++
++            CloseButton = new UIBigButton(true);
++            CloseButton.Caption = "Close";
++            CloseButton.Width = 275;
++            CloseButton.OnButtonClick += (b) => Close();
++            Add(CloseButton);
++
++            SetHeight(Math.Min(ScrHeight - 20, 720));
++            Layout();
++        }
++
++        private static UILabel MakeLabel(int size, Color color)
++        {
++            var label = new UILabel();
++            label.CaptionStyle = label.CaptionStyle.Clone();
++            label.CaptionStyle.Size = size;
++            label.CaptionStyle.Color = color;
++            label.Alignment = TextAlignment.Left | TextAlignment.Top;
++            return label;
++        }
++
++        public override void GameResized()
++        {
++            base.GameResized();
++            SetHeight(Math.Min(ScrHeight - 20, 720));
++            Layout();
++        }
++
++        private void Layout()
++        {
++            //section tabs
++            foreach (var child in TabBar.GetChildren().ToList()) TabBar.Remove(child);
++            var sections = SimitoneSettingsRegistry.Sections;
++            var tabWidth = (ContentWidth - (sections.Length - 1) * 8) / sections.Length;
++            for (int i = 0; i < sections.Length; i++)
++            {
++                var section = sections[i];
++                var tab = new UIFlatButton(section, new Vector2(tabWidth, 40), 17);
++                tab.Position = new Vector2(ContentX + i * (tabWidth + 8), TOP - 20);
++                tab.Selected = section == Section;
++                tab.OnClick += (b) => { Section = section; Page = 0; Layout(); };
++                TabBar.Add(tab);
++            }
++
++            var footerY = Height - 120;
++            PrevPage.Position = new Vector2(ContentX, footerY - 50);
++            NextPage.Position = new Vector2(ContentX + ContentWidth - 140, footerY - 50);
++            PageLabel.Position = new Vector2(ContentX + 150, footerY - 50);
++            PageLabel.Size = new Vector2(ContentWidth - 300, 36);
++            Notice.Position = new Vector2(ContentX, footerY + 10);
++            Notice.Size = new Vector2(ContentWidth - 300, 80);
++            CloseButton.Position = new Vector2(ContentX + ContentWidth - 275, footerY);
++            Refresh();
++        }
++
++        private void Refresh()
++        {
++            foreach (var child in Rows.GetChildren().ToList()) Rows.Remove(child);
++            var items = Settings.Where(x => x.Section == Section).ToList();
++            var pages = Math.Max(1, (items.Count + RowsPerPage - 1) / RowsPerPage);
++            Page = Math.Max(0, Math.Min(pages - 1, Page));
++
++            var y = TOP + 36;
++            foreach (var item in items.Skip(Page * RowsPerPage).Take(RowsPerPage))
++            {
++                AddRow(item, y);
++                y += ROW_HEIGHT;
++            }
++
++            PrevPage.Visible = pages > 1;
++            NextPage.Visible = pages > 1;
++            PrevPage.Disabled = Page == 0;
++            NextPage.Disabled = Page == pages - 1;
++            PageLabel.Caption = (pages > 1) ? $"Page {Page + 1} of {pages}" : "";
++            Notice.Caption = RestartPending
++                ? "Restart Simitone for the changes marked (restart) to take effect."
++                : "Changes are saved immediately.";
++        }
++
++        private void AddRow(SimitoneSettingDef item, int y)
++        {
++            var name = MakeLabel(19, UIStyle.Current.Text);
++            name.Caption = item.Label + (item.RestartRequired ? "  (restart)" : "");
++            name.Position = new Vector2(ContentX, y);
++            Rows.Add(name);
++
++            var help = MakeLabel(13, Color.White * 0.65f);
++            var helpText = (item.Departure ? "Simitone change. " : "") + (item.Help ?? "");
++            help.Caption = help.CaptionStyle.TruncateToWidth(helpText, ContentWidth - 330);
++            help.Position = new Vector2(ContentX, y + 25);
++            Rows.Add(help);
++
++            var right = ContentX + ContentWidth;
++            if (item.Action != null)
++            {
++                var action = new UIFlatButton(item.ActionLabel ?? "Run", new Vector2(300, 40), 17);
++                action.Position = new Vector2(right - 300, y + 4);
++                action.OnClick += (b) => { item.Action(); };
++                Rows.Add(action);
++                return;
++            }
++
++            var value = new UIFlatButton(item.Choices[item.Get()], new Vector2(200, 40), 17);
++            value.Position = new Vector2(right - 250, y + 4);
++            var prev = new UIFlatButton("<", new Vector2(46, 40), 19);
++            prev.Position = new Vector2(right - 300, y + 4);
++            var next = new UIFlatButton(">", new Vector2(46, 40), 19);
++            next.Position = new Vector2(right - 46, y + 4);
++
++            Action<int> step = (dir) =>
++            {
++                var count = item.Choices.Length;
++                var index = (item.Get() + dir + count) % count;
++                item.Set(index);
++                value.Caption = item.Choices[item.Get()];
++                value.Selected = item.Choices == SimitoneSettingDef.OffOn && item.Get() == 1;
++                if (item.RestartRequired && !RestartPending)
++                {
++                    RestartPending = true;
++                    Refresh();
++                }
++            };
++            value.Selected = item.Choices == SimitoneSettingDef.OffOn && item.Get() == 1;
++            value.OnClick += (b) => step(1);
++            prev.OnClick += (b) => step(-1);
++            next.OnClick += (b) => step(1);
++            Rows.Add(value);
++            Rows.Add(prev);
++            Rows.Add(next);
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UISimitoneFrontend.cs b/Client/Simitone/Simitone.Client/UI/Panels/UISimitoneFrontend.cs
+index 973515d..746a637 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UISimitoneFrontend.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UISimitoneFrontend.cs
+@@ -227,7 +227,8 @@ namespace Simitone.Client.UI.Panels
+         public float ClockTween;
+         public override void Update(UpdateState state)
+         {
+-            if (state.NewKeys.Contains(Keys.Space))
++            if (state.NewKeys.Contains(Keys.Space) && !Simitone.Client.UI.Utils.UITextFocus.IsTyping(state)
++                && Game.vm?.TS1State?.CurrentFamily != null) //no family on lots visited without one
+             {
+                 var selected = Game.LotControl.ActiveEntity;
+                 var familyMembers = Game.vm.Context.ObjectQueries.Avatars.Where(x =>
+diff --git a/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs b/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
+index b77285f..82d50ac 100644
+--- a/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
++++ b/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
+@@ -174,6 +174,12 @@ namespace Simitone.Client.UI.Screens
+ 
+         public TS1GameScreen(NeighSelectionMode mode) : base()
+         {
++            Simitone.Client.Utils.SimitoneSettingsRegistry.WriteDiagnostics = () =>
++            {
++                var path = Simitone.Client.Utils.DiagnosticsWriter.Write(vm);
++                Simitone.Client.UI.Panels.UICheatTextbox.ShowDiagnosticsWritten(path);
++                return path;
++            };
+             Bg = new UISimitoneBg();
+             Bg.Position = (new Vector2(ScreenWidth, ScreenHeight)) / 2;
+             Add(Bg);
+@@ -345,19 +351,23 @@ namespace Simitone.Client.UI.Screens
+             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
+             GameFacade.Game.IsMouseVisible = Visible;
+ 
+-            if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
+-            if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
+-            if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
+-            if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
+-            if (state.NewKeys.Contains(Keys.D0))
++            var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
++            if (!typing)
+             {
+-                //frame advance
+-                ChangeSpeedTo(1);
+-                GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
++                if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
++                if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
++                if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
++                if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
++                if (state.NewKeys.Contains(Keys.D0))
++                {
++                    //frame advance
++                    ChangeSpeedTo(1);
++                    GameThread.NextUpdate((FSO.Common.Rendering.Framework.Model.UpdateState ustate) => ChangeSpeedTo(0));
++                }
+             }
+             base.Update(state);
+ 
+-            if (state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
++            if (!typing && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
+             {
+                 GraphicsModeControl.ChangeMode((GraphicsModeControl.Mode == GlobalGraphicsMode.Full3D) ? GlobalGraphicsMode.Hybrid2D : GlobalGraphicsMode.Full3D);
+             }
+diff --git a/Client/Simitone/Simitone.Client/UI/Utils/UITextFocus.cs b/Client/Simitone/Simitone.Client/UI/Utils/UITextFocus.cs
+new file mode 100644
+index 0000000..5257cb4
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Utils/UITextFocus.cs
+@@ -0,0 +1,39 @@
++using FSO.Client;
++using FSO.Client.UI.Controls;
++using FSO.Client.UI.Framework;
++using FSO.Common.Rendering.Framework.Model;
++
++namespace Simitone.Client.UI.Utils
++{
++    /// <summary>
++    /// Keyboard hotkeys must be ignored while the player types into a text field (the cheat box, alert text entry,
++    /// later the catalog search). Text fields read the same key presses the hotkey handlers see, nothing consumes them,
++    /// so typing "giveMoney 100" used to change the game speed and Space cycled Sims.
++    /// </summary>
++    public static class UITextFocus
++    {
++        /// <summary>
++        /// True if a text field that is still on screen has keyboard focus.
++        /// FSO.UI never clears focus when a text field is hidden or removed (and doesn't clear Parent on removal), so
++        /// GetFocus() alone would block hotkeys for good after the cheat box was used once. Instead, the focused field
++        /// and all its ancestors must be visible and still attached, up to the current screen.
++        /// </summary>
++        public static bool IsTyping(UpdateState state)
++        {
++            var focus = (state?.InputManager ?? GameFacade.Screens?.inputManager)?.GetFocus() as UITextEdit;
++            if (focus == null) return false;
++            UIElement elem = focus;
++            var screen = GameFacade.Screens?.CurrentUIScreen;
++            while (elem != null)
++            {
++                if (!elem.Visible) return false;
++                if (elem == screen) return true;
++                var parent = elem.Parent;
++                if (parent == null) return false;
++                if (!parent.GetChildren().Contains(elem)) return false;
++                elem = parent;
++            }
++            return false;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/DiagnosticsWriter.cs b/Client/Simitone/Simitone.Client/Utils/DiagnosticsWriter.cs
+new file mode 100644
+index 0000000..2527fd4
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/DiagnosticsWriter.cs
+@@ -0,0 +1,33 @@
++using FSO.Common;
++using FSO.SimAntics;
++using FSO.SimAntics.Diagnostics;
++using System;
++using System.IO;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// Writes VMDiagnostics reports to Documents/Simitone/diagnostics, for bug reports and for comparing routing
++    /// behaviour (the original game has a "write_routes" cheat with the same purpose).
++    /// </summary>
++    public static class DiagnosticsWriter
++    {
++        /// <summary>Returns the written file's path, or null if there is no lot loaded or writing failed.</summary>
++        public static string Write(VM vm)
++        {
++            if (vm == null) return null;
++            try
++            {
++                var dir = Path.Combine(FSOEnvironment.UserDir, "diagnostics");
++                Directory.CreateDirectory(dir);
++                var path = Path.Combine(dir, $"diagnostics-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
++                File.WriteAllText(path, VMDiagnostics.Dump(vm));
++                return path;
++            }
++            catch (Exception)
++            {
++                return null;
++            }
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+new file mode 100644
+index 0000000..30f76d6
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+@@ -0,0 +1,84 @@
++using FSO.Common;
++using FSO.SimAntics;
++using FSO.SimAntics.Engine;
++using System.Collections.Generic;
++using System.IO;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// Simitone's own settings, stored in Documents/Simitone/simitone.ini.
++    ///
++    /// Kept apart from FreeSO's GlobalSettings (config.ini) because Program.cs overwrites several GlobalSettings
++    /// values on every start, and because every Simitone behaviour change must be switchable on its own.
++    /// Like GlobalSettings, a setting is a default in _DefaultValues plus a public property of the same name; IniConfig
++    /// loads and saves them by reflection (enums don't round-trip, so choices are stored as int).
++    /// </summary>
++    public class SimitoneSettings : IniConfig
++    {
++        private static SimitoneSettings _Default;
++
++        public static SimitoneSettings Default
++        {
++            get
++            {
++                if (_Default == null) _Default = new SimitoneSettings(Path.Combine(FSOEnvironment.UserDir, "simitone.ini"));
++                return _Default;
++            }
++        }
++
++        public SimitoneSettings(string path) : base(path) { }
++
++        public override string HeadingComment => "Simitone settings. Most can be changed in game (Options > Settings).";
++
++        private Dictionary<string, string> _DefaultValues = new Dictionary<string, string>()
++        {
++            //simulation changes (VMFeatures)
++            { "Shimmy", "true" },
++
++            //debugging
++            { "Diagnostics", "true" },
++            { "DrawRoutes", "false" },
++
++            //start-up options (each also has a command line switch, which wins for that run)
++            { "Enable3D", "false" },
++            { "UseDirectX", "true" },
++            { "AntiAlias", "false" },
++            { "TouchUI", "false" },
++            { "NoSound", "false" },
++            { "LightingMode", "3" },
++            { "ComplexShaders", "true" },
++            { "EnableTransitions", "true" },
++        };
++
++        public override Dictionary<string, string> DefaultValues
++        {
++            get { return _DefaultValues; }
++            set { _DefaultValues = value; }
++        }
++
++        public bool Shimmy { get; set; }
++
++        public bool Diagnostics { get; set; }
++        public bool DrawRoutes { get; set; }
++
++        public bool Enable3D { get; set; }
++        public bool UseDirectX { get; set; }
++        public bool AntiAlias { get; set; }
++        public bool TouchUI { get; set; }
++        public bool NoSound { get; set; }
++        public int LightingMode { get; set; }
++        public bool ComplexShaders { get; set; }
++        public bool EnableTransitions { get; set; }
++
++        /// <summary>
++        /// Pushes the simulation switches into the engine. Called at start-up and after every change.
++        /// </summary>
++        public void ApplyToEngine()
++        {
++            VMFeatures.Shimmy = Shimmy;
++            VMFeatures.Diagnostics = Diagnostics;
++            VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+new file mode 100644
+index 0000000..3eb07ff
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+@@ -0,0 +1,183 @@
++using FSO.Client;
++using FSO.HIT;
++using FSO.HIT.Model;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// One row in the settings dialog. A setting is a list of choices (a toggle is Off/On) plus a getter and setter of
++    /// the chosen index. The setter is responsible for applying and saving the value.
++    /// </summary>
++    public class SimitoneSettingDef
++    {
++        public string Section;
++        public string Label;
++        /// <summary>One line shown under the label.</summary>
++        public string Help;
++        /// <summary>Takes effect after restarting Simitone.</summary>
++        public bool RestartRequired;
++        /// <summary>A Simitone behaviour change compared to the original game (as opposed to an engine/display option).</summary>
++        public bool Departure;
++        public string[] Choices;
++        public Func<int> Get;
++        public Action<int> Set;
++        /// <summary>For action rows (a button, no value): run when clicked.</summary>
++        public Action Action;
++        public string ActionLabel;
++
++        public static readonly string[] OffOn = new string[] { "Off", "On" };
++    }
++
++    /// <summary>
++    /// Every setting the dialog shows: Simitone's own (SimitoneSettings) and the existing FreeSO ones Simitone uses
++    /// (GlobalSettings). New features add their switch here.
++    /// </summary>
++    public static class SimitoneSettingsRegistry
++    {
++        public const string SIMULATION = "Simulation";
++        public const string CONTROLS = "Camera & Controls";
++        public const string SOUND = "Sound";
++        public const string DISPLAY = "Display";
++        public const string DEBUG = "Debug";
++
++        public static readonly string[] Sections = new string[] { SIMULATION, CONTROLS, SOUND, DISPLAY, DEBUG };
++
++        /// <summary>Set by the client to write the diagnostics report (needs the running VM).</summary>
++        public static Func<string> WriteDiagnostics;
++
++        private static SimitoneSettings S => SimitoneSettings.Default;
++        private static GlobalSettings G => GlobalSettings.Default;
++
++        private static void SaveS()
++        {
++            S.Save();
++            S.ApplyToEngine();
++        }
++
++        private static SimitoneSettingDef Toggle(string section, string label, string help, Func<bool> get, Action<bool> set,
++            bool restart = false, bool departure = false)
++        {
++            return new SimitoneSettingDef()
++            {
++                Section = section, Label = label, Help = help, RestartRequired = restart, Departure = departure,
++                Choices = SimitoneSettingDef.OffOn,
++                Get = () => get() ? 1 : 0,
++                Set = (i) => set(i == 1)
++            };
++        }
++
++        private static SimitoneSettingDef Volume(string label, Func<int> get, Action<int> set, HITVolumeGroup group)
++        {
++            return new SimitoneSettingDef()
++            {
++                Section = SOUND, Label = label,
++                Choices = Enumerable.Range(0, 11).Select(x => (x * 10) + "%").ToArray(),
++                Get = () => Math.Max(0, Math.Min(10, get())),
++                Set = (i) =>
++                {
++                    set(i);
++                    G.Save();
++                    HITVM.Get()?.SetMasterVolume(group, i / 10f);
++                }
++            };
++        }
++
++        //labels match FSO.Files.Formats.IFF.Chunks.STRLangCode 1-20
++        private static readonly string[] Languages = new string[]
++        {
++            "English (US)", "English (UK)", "French", "German", "Italian", "Spanish", "Dutch", "Danish", "Swedish",
++            "Norwegian", "Finnish", "Hebrew", "Russian", "Portuguese", "Japanese", "Polish", "Simplified Chinese",
++            "Traditional Chinese", "Thai", "Korean"
++        };
++
++        private static readonly int[] RefreshRates = new int[] { 30, 60, 75, 100, 120, 144, 165, 240 };
++
++        public static List<SimitoneSettingDef> All()
++        {
++            var list = new List<SimitoneSettingDef>();
++
++            //--- simulation (Simitone changes to the original behaviour)
++            list.Add(Toggle(SIMULATION, "Shimmy through narrow gaps",
++                "Sims side-step and pets squeeze between objects instead of failing to route.",
++                () => S.Shimmy, (v) => { S.Shimmy = v; SaveS(); }, departure: true));
++
++            //--- camera and controls
++            list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
++                () => G.EdgeScroll, (v) => { G.EdgeScroll = v; G.Save(); }));
++
++            //--- sound
++            list.Add(Volume("Music volume", () => G.MusicVolume, (v) => G.MusicVolume = (byte)v, HITVolumeGroup.MUSIC));
++            list.Add(Volume("Sound effects volume", () => G.FXVolume, (v) => G.FXVolume = (byte)v, HITVolumeGroup.FX));
++            list.Add(Volume("Voices volume", () => G.VoxVolume, (v) => G.VoxVolume = (byte)v, HITVolumeGroup.VOX));
++            list.Add(Volume("Ambience volume", () => G.AmbienceVolume, (v) => G.AmbienceVolume = (byte)v, HITVolumeGroup.AMBIENCE));
++            list.Add(Toggle(SOUND, "Disable all sound", "Starts Simitone without audio (same as -nosound).",
++                () => S.NoSound, (v) => { S.NoSound = v; S.Save(); }, restart: true));
++
++            //--- display
++            list.Add(Toggle(DISPLAY, "Fullscreen", "Also toggled with Alt+Enter.",
++                () => !G.Windowed,
++                (v) =>
++                {
++                    var gdm = GameFacade.GraphicsDeviceManager;
++                    if (gdm != null && gdm.IsFullScreen != v) gdm.ToggleFullScreen();
++                    G.Windowed = !v;
++                    G.Save();
++                }));
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = DISPLAY, Label = "Frame rate", Help = "Target refresh rate (same as -hz).", RestartRequired = true,
++                Choices = RefreshRates.Select(x => x + " Hz").ToArray(),
++                Get = () => Math.Max(0, Array.IndexOf(RefreshRates, G.TargetRefreshRate)),
++                Set = (i) => { G.TargetRefreshRate = RefreshRates[i]; G.Save(); }
++            });
++            list.Add(Toggle(DISPLAY, "3D mode", "Use the 3D renderer (same as -3d). F12 switches 3D/hybrid in game.",
++                () => S.Enable3D, (v) => { S.Enable3D = v; S.Save(); }, restart: true));
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = DISPLAY, Label = "Renderer", Help = "DirectX or OpenGL (same as -dx / -gl). Windows only.", RestartRequired = true,
++                Choices = new string[] { "OpenGL", "DirectX" },
++                Get = () => S.UseDirectX ? 1 : 0,
++                Set = (i) => { S.UseDirectX = i == 1; S.Save(); }
++            });
++            list.Add(Toggle(DISPLAY, "Anti-aliasing", "Smooth edges (same as -aa).",
++                () => S.AntiAlias, (v) => { S.AntiAlias = v; S.Save(); }, restart: true));
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = DISPLAY, Label = "Lighting quality", Help = "Lower settings are faster on old graphics cards.", RestartRequired = true,
++                Choices = new string[] { "Off", "Low", "Medium", "High" },
++                Get = () => Math.Max(0, Math.Min(3, S.LightingMode)),
++                Set = (i) => { S.LightingMode = i; S.Save(); }
++            });
++            list.Add(Toggle(DISPLAY, "Advanced shaders", "More detailed lighting and shading.",
++                () => S.ComplexShaders, (v) => { S.ComplexShaders = v; S.Save(); }, restart: true));
++            list.Add(Toggle(DISPLAY, "Lot transitions", "Animated transitions when loading lots.",
++                () => S.EnableTransitions, (v) => { S.EnableTransitions = v; S.Save(); }, restart: true));
++            list.Add(Toggle(DISPLAY, "Touch interface", "Mobile-style controls and on-screen keyboard (same as -touch).",
++                () => S.TouchUI, (v) => { S.TouchUI = v; S.Save(); }, restart: true));
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = DISPLAY, Label = "Language", Help = "Game text language (same as -lang).", RestartRequired = true,
++                Choices = Languages,
++                Get = () => Math.Max(0, Math.Min(Languages.Length - 1, G.LanguageCode - 1)),
++                Set = (i) => { G.LanguageCode = (byte)(i + 1); G.Save(); }
++            });
++
++            //--- debug
++            list.Add(Toggle(DEBUG, "Draw routes", "Show route rectangles, paths and shimmy gaps (also: draw_routes cheat).",
++                () => S.DrawRoutes, (v) => { S.DrawRoutes = v; SaveS(); }));
++            list.Add(Toggle(DEBUG, "Record diagnostics", "Keep each Sim's recent route events and why actions ended.",
++                () => S.Diagnostics, (v) => { S.Diagnostics = v; SaveS(); }));
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = DEBUG, Label = "Write diagnostics report", Help = "Saves a report to Documents/Simitone/diagnostics (also: write_routes cheat).",
++                ActionLabel = "Write",
++                Action = () => WriteDiagnostics?.Invoke()
++            });
++
++            return list;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Windows/Program.cs b/Client/Simitone/Simitone.Windows/Program.cs
+index 962a88c..4e64f1f 100644
+--- a/Client/Simitone/Simitone.Windows/Program.cs
++++ b/Client/Simitone/Simitone.Windows/Program.cs
+@@ -44,13 +44,21 @@ namespace Simitone.Windows
+             else
+                 gameLocator = new WindowsLocator();
+ 
+-            var useDX = !linux;
+             var path = gameLocator.FindTheSims1();
+ 
++            //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
++            //created next to the exe instead of in Documents/Simitone.
++            FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
++            Directory.CreateDirectory(FSOEnvironment.UserDir);
+ 
+-            FSOEnvironment.Enable3D = false;
++            //start-up options come from simitone.ini (Options > Settings); command line switches override them for this run.
++            var startup = Simitone.Client.Utils.SimitoneSettings.Default;
++            var useDX = !linux && startup.UseDirectX;
++            FSOEnvironment.Enable3D = startup.Enable3D;
++            FSOEnvironment.SoftwareKeyboard = startup.TouchUI;
++            FSOEnvironment.NoSound = startup.NoSound;
+             bool ide = false;
+-            bool aa = false;
++            bool aa = startup.AntiAlias;
+             bool jit = false;
+             #region User resolution parmeters
+ 
+@@ -117,8 +125,6 @@ namespace Simitone.Windows
+             {
+                 FSOEnvironment.ContentDir = "Content/";
+                 FSOEnvironment.GFXContentDir = "Content/" + (useDX ? "DX/" : "OGL/");
+-                FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
+-                Directory.CreateDirectory(FSOEnvironment.UserDir);
+                 FSOEnvironment.Linux = false;
+                 FSOEnvironment.DirectX = useDX;
+                 FSOEnvironment.GameThread = Thread.CurrentThread;
+@@ -129,10 +135,10 @@ namespace Simitone.Windows
+                 GlobalSettings.Default.TS1HybridEnable = true;
+                 GlobalSettings.Default.TS1HybridPath = path;
+                 GlobalSettings.Default.ClientVersion = "0";
+-                GlobalSettings.Default.LightingMode = 3;
++                GlobalSettings.Default.LightingMode = startup.LightingMode;
+                 GlobalSettings.Default.AntiAlias = aa ? 1 : 0;
+-                GlobalSettings.Default.ComplexShaders = true;
+-                GlobalSettings.Default.EnableTransitions = true;
++                GlobalSettings.Default.ComplexShaders = startup.ComplexShaders;
++                GlobalSettings.Default.EnableTransitions = startup.EnableTransitions;
+ 
+                 if (ide) new FSO.IDE.VolcanicStartProxy().InitVolcanic(args);
+ 
+diff --git a/Tests/Simitone.Routing.Tests/DiagnosticsTests.cs b/Tests/Simitone.Routing.Tests/DiagnosticsTests.cs
+new file mode 100644
+index 0000000..ba04b30
+--- /dev/null
++++ b/Tests/Simitone.Routing.Tests/DiagnosticsTests.cs
+@@ -0,0 +1,29 @@
++using FSO.SimAntics.Diagnostics;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Routing.Tests
++{
++    public static class DiagnosticsTests
++    {
++        private static void Check(bool cond, string msg)
++        {
++            if (!cond) throw new Exception(msg);
++        }
++
++        public static IEnumerable<(string, Action)> All()
++        {
++            yield return ("ring buffer keeps the most recent items, oldest first", () =>
++            {
++                var b = new VMRingBuffer<int>(3);
++                Check(b.Count == 0 && b.InOrder().Count() == 0 && b.Last() == 0, "empty buffer");
++                b.Add(1); b.Add(2);
++                Check(b.InOrder().SequenceEqual(new[] { 1, 2 }) && b.Last() == 2, "partly filled: " + string.Join(",", b.InOrder()));
++                b.Add(3); b.Add(4); b.Add(5);
++                Check(b.Count == 3, "count is capped");
++                Check(b.InOrder().SequenceEqual(new[] { 3, 4, 5 }) && b.Last() == 5, "wrapped: " + string.Join(",", b.InOrder()));
++            });
++        }
++    }
++}
+diff --git a/Tests/Simitone.Routing.Tests/Program.cs b/Tests/Simitone.Routing.Tests/Program.cs
+index b43a2f8..3080088 100644
+--- a/Tests/Simitone.Routing.Tests/Program.cs
++++ b/Tests/Simitone.Routing.Tests/Program.cs
+@@ -1,4 +1,5 @@
+ using System;
++using System.Linq;
+ 
+ namespace Simitone.Routing.Tests
+ {
+@@ -11,7 +12,9 @@ namespace Simitone.Routing.Tests
+         public static int Main(string[] args)
+         {
+             int failed = 0, total = 0;
+-            foreach (var (name, test) in ShimmyPlannerTests.All())
++            var tests = ShimmyPlannerTests.All()
++                .Concat(DiagnosticsTests.All());
++            foreach (var (name, test) in tests)
+             {
+                 total++;
+                 try
+-- 
+2.43.0

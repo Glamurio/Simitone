@@ -1,0 +1,62 @@
+From 7b1085fbaf0dca1d81803184c3ef2b8942d8aced Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 18:03:58 +0200
+Subject: [PATCH 2/4] Settings: switches for routing and action queue fixes
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019q6m8f542cVUMKg755aFtZ
+---
+ Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs   | 6 ++++++
+ .../Simitone.Client/Utils/SimitoneSettingsRegistry.cs       | 6 ++++++
+ 2 files changed, 12 insertions(+)
+
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+index 30f76d6..ee47d6b 100644
+--- a/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+@@ -35,6 +35,8 @@ namespace Simitone.Client.Utils
+         {
+             //simulation changes (VMFeatures)
+             { "Shimmy", "true" },
++            { "RoutingFixes", "true" },
++            { "QueueFixes", "true" },
+ 
+             //debugging
+             { "Diagnostics", "true" },
+@@ -58,6 +60,8 @@ namespace Simitone.Client.Utils
+         }
+ 
+         public bool Shimmy { get; set; }
++        public bool RoutingFixes { get; set; }
++        public bool QueueFixes { get; set; }
+ 
+         public bool Diagnostics { get; set; }
+         public bool DrawRoutes { get; set; }
+@@ -77,6 +81,8 @@ namespace Simitone.Client.Utils
+         public void ApplyToEngine()
+         {
+             VMFeatures.Shimmy = Shimmy;
++            VMFeatures.RoutingFixes = RoutingFixes;
++            VMFeatures.QueueFixes = QueueFixes;
+             VMFeatures.Diagnostics = Diagnostics;
+             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
+         }
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+index 3eb07ff..143142e 100644
+--- a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+@@ -103,6 +103,12 @@ namespace Simitone.Client.Utils
+             list.Add(Toggle(SIMULATION, "Shimmy through narrow gaps",
+                 "Sims side-step and pets squeeze between objects instead of failing to route.",
+                 () => S.Shimmy, (v) => { S.Shimmy = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Routing fixes",
++                "Each destination gets its own wait time, failures blame the right object, next goals use doors.",
++                () => S.RoutingFixes, (v) => { S.RoutingFixes = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Action queue fixes",
++                "Queued actions for objects pets can use can be cancelled; fixes a freeze when queueing.",
++                () => S.QueueFixes, (v) => { S.QueueFixes = v; SaveS(); }, departure: true));
+ 
+             //--- camera and controls
+             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
+-- 
+2.43.0
