@@ -15,6 +15,11 @@ namespace Simitone.Windows.GameLocator
         private static readonly Lazy<string> SteamInstallPath = new(() =>
         {
             string path = Registry.GetValue(SteamRegistryPath, "InstallPath", null)?.ToString();
+            if (!Directory.Exists(path))
+            {
+                //a per-user (or portable) Steam only has the HKCU entry.
+                path = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null)?.ToString();
+            }
             return Directory.Exists(path) ? path : null;
         }, isThreadSafe: true);
 

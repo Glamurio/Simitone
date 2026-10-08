@@ -45,6 +45,7 @@ namespace Simitone.Windows
                 gameLocator = new WindowsLocator();
 
             var path = gameLocator.FindTheSims1();
+            bool pathGiven = false;
 
             //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
             //created next to the exe instead of in Documents/Simitone.
@@ -107,12 +108,27 @@ namespace Simitone.Windows
                                 break;
                             case string s when s.StartsWith("path"): //The Sims path
                                 path = s.Length > 4 ? s.Substring(4).Trim('"').Replace('\\', '/') + "/" : path;
+                                pathGiven = s.Length > 4;
                                 break;
                         }
                     }
                 }
             }
             #endregion
+            if (path == null || (pathGiven && !GameInstall.IsValid(path)))
+            {
+                //nothing to start with: say why instead of closing silently.
+                MessageBox.Show("Simitone could not find The Sims 1 (no GameData/Behavior.iff in " + (path ?? "any known install location") + ").\n\n" +
+                    "Start Simitone with -path\"C:\\path\\to\\The Sims\" to point it at the game folder " +
+                    "(for Steam: ...\\steamapps\\common\\The Sims Legacy Collection).", "Simitone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            //original-game saves: where the install keeps them (Steam's Legacy Collection keeps them outside the install),
+            //and a requested re-import has to happen before any neighbourhood is loaded.
+            Simitone.Client.Utils.SaveImport.ApplyPending();
+            FSO.Content.TS1.TS1NeighborhoodProvider.SaveImportRoots = GameInstall.SaveRoots(path);
+
             useDX = MonogameLinker.Link(useDX);
 
             FSO.Files.ImageLoaderHelpers.BitmapFunction = BitmapReader;
@@ -128,6 +144,8 @@ namespace Simitone.Windows
                 FSOEnvironment.Linux = false;
                 FSOEnvironment.DirectX = useDX;
                 FSOEnvironment.GameThread = Thread.CurrentThread;
+                //never chosen in Simitone: follow the language the installed game was set to.
+                if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = GameInstall.InstalledLanguage();
                 if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = 1;
                 FSO.Files.Formats.IFF.Chunks.STR.DefaultLangCode = (FSO.Files.Formats.IFF.Chunks.STRLangCode)GlobalSettings.Default.LanguageCode;
 

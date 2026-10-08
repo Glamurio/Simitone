@@ -27,6 +27,8 @@ namespace Simitone.Client.Utils
         /// <summary>For action rows (a button, no value): run when clicked.</summary>
         public Action Action;
         public string ActionLabel;
+        /// <summary>Optional: the action button's text, re-read after each click (for actions that toggle something).</summary>
+        public Func<string> ActionState;
 
         public static readonly string[] OffOn = new string[] { "Off", "On" };
     }
@@ -205,6 +207,16 @@ namespace Simitone.Client.Utils
                 Choices = Languages,
                 Get = () => Math.Max(0, Math.Min(Languages.Length - 1, G.LanguageCode - 1)),
                 Set = (i) => { G.LanguageCode = (byte)(i + 1); G.Save(); }
+            });
+
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = CONTROLS, Label = "Re-import saves from The Sims",
+                Help = "Simitone works on its own copy of your neighbourhoods. This sets the copy aside (renamed, not deleted) and imports your original game's saves again.",
+                RestartRequired = true,
+                ActionLabel = "Re-import",
+                ActionState = () => SaveImport.Pending ? "Will re-import on restart (click to cancel)" : "Re-import",
+                Action = () => { if (SaveImport.Pending) SaveImport.Cancel(); else SaveImport.Request(); }
             });
 
             //--- debug

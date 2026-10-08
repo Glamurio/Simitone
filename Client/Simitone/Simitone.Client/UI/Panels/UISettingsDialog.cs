@@ -155,9 +155,18 @@ namespace Simitone.Client.UI.Panels
             var right = ContentX + ContentWidth;
             if (item.Action != null)
             {
-                var action = new UIFlatButton(item.ActionLabel ?? "Run", new Vector2(300, 40), 17);
+                var action = new UIFlatButton(item.ActionState?.Invoke() ?? item.ActionLabel ?? "Run", new Vector2(300, 40), 17);
                 action.Position = new Vector2(right - 300, y + 4);
-                action.OnClick += (b) => { item.Action(); };
+                action.OnClick += (b) =>
+                {
+                    item.Action();
+                    if (item.ActionState != null) action.Caption = item.ActionState();
+                    if (item.RestartRequired && !RestartPending)
+                    {
+                        RestartPending = true;
+                        Refresh();
+                    }
+                };
                 Rows.Add(action);
                 return;
             }
