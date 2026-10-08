@@ -1,0 +1,23 @@
+From fa1ed0f3271ab81d5ef4d0c07f3df64c064d02b8 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 22:33:56 +0200
+Subject: [PATCH 2/2] FreeSO: approach positions, object selection, free will,
+ queue recovery, conversations, undo buy (qol)
+
+Points tools/freeso.ref at FreeSO qol 8b27aa271.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019q6m8f542cVUMKg755aFtZ
+---
+ tools/freeso.ref | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/tools/freeso.ref b/tools/freeso.ref
+index f819f0b..04221ac 100644
+--- a/tools/freeso.ref
++++ b/tools/freeso.ref
+@@ -1 +1 @@
+-84bf39f1c66fe9d440b7af029240135a7550e653
++8b27aa27168760b317eb84bbb19b98c9fabc8509
+-- 
+2.43.0

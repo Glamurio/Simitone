@@ -1,0 +1,1128 @@
+From 3782c8384c3c2f4e3fe90ee6aff443bbf189f6a2 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 22:31:44 +0200
+Subject: [PATCH 1/2] Settings and UI for roadmap 2-6, 10-13: switches, queue
+ notes, camera, catalog search, undo
+
+Simulation switches (Settings > Simulation, all default on, each a
+VMFeatures switch in FreeSO qol): smarter approach positions, avoid
+unreachable objects, free will fixes, free will: count each action once
+(balance), keep the queue when an object vanishes, respect
+conversations.
+
+Interface (the "Camera & Controls" tab is now "Interface"):
+- Say why actions were dropped (5): a short note under the queue when an
+  action disappears because it couldn't start, its object was deleted,
+  or it was dropped with one (UIQueueNotices, from
+  VMDiagnostics.OnActionEnded).
+- Camera shortcuts (13): arrow keys pan, C centres on the selected Sim,
+  F follows it, Backspace returns to the previous view, F5-F7 recall and
+  Ctrl+F5-F7 save views (per lot). Ignored while typing.
+- Catalog search and wheel scrolling (11): a search box in the buy
+  catalog finds items of every buy category by localised name and
+  description (CTSS, CatalogSearchIndex); the mouse wheel scrolls the
+  catalog row instead of zooming while over it (UIWheelRouting). The
+  filtered catalog list is materialised (items were read with ElementAt
+  on a deferred query).
+- Undo in buy and build mode (12, phase 1): Ctrl+Z / Ctrl+Y for buying
+  (full refund via VMNetUndoBuyCmd), moving and rotating objects.
+  History is per lot and cleared on returning to live mode.
+
+Tests: room reachability and route failure memory.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019q6m8f542cVUMKg755aFtZ
+---
+ .../UI/Controls/UITouchScroll.cs              |   5 +
+ .../Panels/LiveSubpanels/UIBuyBrowsePanel.cs  |  88 ++++++++++-
+ .../UI/Panels/UIInteractionQueue.cs           |  44 ++++++
+ .../Simitone.Client/UI/Panels/UILotControl.cs |   2 +
+ .../UI/Panels/UILotControlTouchHelper.cs      |  16 +-
+ .../UI/Panels/UIObjectHolder.cs               |  14 ++
+ .../UI/Screens/TS1GameScreen.cs               |  23 +++
+ .../UI/Utils/UICameraShortcuts.cs             | 116 +++++++++++++++
+ .../UI/Utils/UIQueueNotices.cs                |  65 ++++++++
+ .../UI/Utils/UIWheelRouting.cs                |  64 ++++++++
+ .../Simitone.Client/Utils/BuildUndoStack.cs   | 139 ++++++++++++++++++
+ .../Utils/CatalogSearchIndex.cs               |  94 ++++++++++++
+ .../Simitone.Client/Utils/SimitoneSettings.cs |  29 ++++
+ .../Utils/SimitoneSettingsRegistry.cs         |  32 +++-
+ Tests/Simitone.Routing.Tests/Program.cs       |   3 +-
+ .../Simitone.Routing.Tests/SelectionTests.cs  |  66 +++++++++
+ 16 files changed, 790 insertions(+), 10 deletions(-)
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Utils/UICameraShortcuts.cs
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Utils/UIQueueNotices.cs
+ create mode 100644 Client/Simitone/Simitone.Client/UI/Utils/UIWheelRouting.cs
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/BuildUndoStack.cs
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/CatalogSearchIndex.cs
+ create mode 100644 Tests/Simitone.Routing.Tests/SelectionTests.cs
+
+diff --git a/Client/Simitone/Simitone.Client/UI/Controls/UITouchScroll.cs b/Client/Simitone/Simitone.Client/UI/Controls/UITouchScroll.cs
+index af2da19..f30739a 100644
+--- a/Client/Simitone/Simitone.Client/UI/Controls/UITouchScroll.cs
++++ b/Client/Simitone/Simitone.Client/UI/Controls/UITouchScroll.cs
+@@ -21,6 +21,8 @@ namespace Simitone.Client.UI.Controls
+         public bool DrawBounds = true;
+         public int Margin;
+         public bool VerticalMode;
++        /// <summary>Scroll with the mouse wheel while the mouse is over this (Simitone catalog setting). See UIWheelRouting.</summary>
++        public bool WheelScroll;
+ 
+         private UIMouseEventRef HitTest;
+ 
+@@ -139,6 +141,9 @@ namespace Simitone.Client.UI.Controls
+ 
+             var length = LengthProvider();
+ 
++            //one wheel notch (120) moves one item.
++            if (WheelScroll && Visible) Simitone.Client.UI.Utils.UIWheelRouting.Register(this, () => Size, (delta) => Scroll -= delta / 120f * ItemWidth);
++
+             //perform scroll and input management.
+ 
+             if (MouseDownID != -1)
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/LiveSubpanels/UIBuyBrowsePanel.cs b/Client/Simitone/Simitone.Client/UI/Panels/LiveSubpanels/UIBuyBrowsePanel.cs
+index d331844..abaa762 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/LiveSubpanels/UIBuyBrowsePanel.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/LiveSubpanels/UIBuyBrowsePanel.cs
+@@ -329,6 +329,15 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+ 
+         public bool HoldingEvents;
+ 
++        //catalog search (roadmap 11, SimitoneSettings.CatalogSearch): a search box at the right of the buy catalog.
++        private const int SEARCH_WIDTH = 210;
++        private UITextBox SearchBox;
++        private UILabel SearchLabel;
++        private bool Searching;
++        private bool ClearingSearch;
++        private bool SearchEnabled => Mode != UICatalogMode.Build && Simitone.Client.Utils.SimitoneSettings.Default.CatalogSearch
++            && !FSO.Common.FSOEnvironment.SoftwareKeyboard;
++
+         public UIBuyBrowsePanel(TS1GameScreen screen, sbyte category, UICatalogMode mode) : base(screen) {
+             CatContainer = new UITouchScroll(() => FilterCategory?.Count() ?? 0, CatalogElemProvider);
+             CatContainer.ItemWidth = 90;
+@@ -336,10 +345,12 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+             CatContainer.Margin = 15;
+             CatContainer.SetScroll(-15);
+             CatContainer.Size = new Vector2(775, 128);
++            CatContainer.WheelScroll = Simitone.Client.Utils.SimitoneSettings.Default.CatalogSearch;
+             Category = category;
+ 
+             Add(CatContainer);
+             Mode = mode;
++            if (SearchEnabled) InitSearch();
+             GameResized();
+ 
+             InitCategory(category, false);
+@@ -476,6 +487,13 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+ 
+         public void Reset()
+         {
++            if (SearchBox != null && Searching)
++            {
++                Searching = false;
++                ClearingSearch = true;
++                SearchBox.CurrentText = "";
++                ClearingSearch = false;
++            }
+             GameFacade.Screens.Tween.To(CatContainer, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
+             InitCategory(Category, false);
+         }
+@@ -778,10 +796,73 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+         public override void GameResized()
+         {
+             base.GameResized();
+-            CatContainer.Size = new Vector2(Size.X, 128);
++            var searchWidth = (SearchBox != null) ? SEARCH_WIDTH : 0;
++            CatContainer.Size = new Vector2(Size.X - searchWidth, 128);
++            if (SearchBox != null)
++            {
++                SearchLabel.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 26);
++                SearchBox.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 50);
++            }
+             if (ChoosingSub) Reset();
+         }
+ 
++        private void InitSearch()
++        {
++            SearchLabel = new UILabel();
++            SearchLabel.Caption = "Search the catalog";
++            SearchLabel.CaptionStyle = SearchLabel.CaptionStyle.Clone();
++            SearchLabel.CaptionStyle.Size = 12;
++            SearchLabel.CaptionStyle.Color = UIStyle.Current.Text;
++            Add(SearchLabel);
++
++            SearchBox = new UITextBox();
++            SearchBox.SetSize(SEARCH_WIDTH - 20, 32);
++            SearchBox.MaxChars = 40;
++            SearchBox.FlashOnEmpty = true;
++            SearchBox.OnChange += (elem) => UpdateSearch();
++            Add(SearchBox);
++        }
++
++        private void HideSubButtons()
++        {
++            foreach (var btn in SelButtons)
++                GameFacade.Screens.Tween.To(btn, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
++            foreach (var label in SelLabels)
++                GameFacade.Screens.Tween.To(label, 0.5f, new Dictionary<string, float>() { { "Opacity", 0f } }, TweenQuad.EaseOut);
++        }
++
++        /// <summary>
++        /// Shows every buy item of this catalog mode (any category) matching the search text, ranked by
++        /// CatalogSearchIndex. Clearing the text goes back to the subcategory choice.
++        /// </summary>
++        private void UpdateSearch()
++        {
++            if (ClearingSearch) return;
++            var query = SearchBox.CurrentText?.Trim() ?? "";
++            if (query.Length == 0)
++            {
++                if (Searching)
++                {
++                    Searching = false;
++                    Reset();
++                }
++                return;
++            }
++            if (ChoosingSub) HideSubButtons();
++            ChoosingSub = false;
++            if (!Searching)
++            {
++                CatContainer.Opacity = 0f;
++                GameFacade.Screens.Tween.To(CatContainer, 0.3f, new Dictionary<string, float>() { { "Opacity", 1f } }, TweenQuad.EaseOut);
++            }
++            Searching = true;
++            //buy catalog categories are 0-7; build objects (doors, windows...) are 8 and up.
++            FilterCategory = Simitone.Client.Utils.CatalogSearchIndex.Find(query, x => x.Category >= 0 && x.Category < 8 && GetSubsort(x) > 0)
++                .Select(x => new UICatalogElement() { Item = x, CalcPrice = (int)x.Price }).ToList();
++            CatContainer.Reset();
++            CatContainer.SetScroll(-15);
++        }
++
+         public override void Update(UpdateState state)
+         {
+             Invalidate();
+@@ -867,7 +948,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+             }
+             else if (index == 8)
+             {
+-                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item)) > 0);
++                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item)) > 0).ToList();
+             }
+             else
+             {
+@@ -876,7 +957,8 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
+                 {
+                     mask |= 16;
+                 }
+-                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item) & mask) > 0);
++                //materialised: the catalog row reads items by index (ElementAt), which re-ran this filter every time.
++                FilterCategory = FullCategory.Where(x => (GetSubsort(x.Item) & mask) > 0).ToList();
+             }
+             CatContainer.Reset();
+         }
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UIInteractionQueue.cs b/Client/Simitone/Simitone.Client/UI/Panels/UIInteractionQueue.cs
+index 2d20443..076fc97 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UIInteractionQueue.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UIInteractionQueue.cs
+@@ -8,6 +8,7 @@ using System;
+ using System.Collections.Generic;
+ using Microsoft.Xna.Framework;
+ using FSO.Client.UI.Framework;
++using FSO.Client.UI.Controls;
+ using FSO.Client.UI.Model;
+ using FSO.Common.Rendering.Framework.Model;
+ using FSO.SimAntics.Engine;
+@@ -38,6 +39,47 @@ namespace Simitone.Client.UI.Panels
+             this.vm = vm;
+             this.QueueOwner = QueueOwner;
+             QueueItems = new List<UIIQTrackEntry>();
++            Simitone.Client.UI.Utils.UIQueueNotices.Hook();
++        }
++
++        //notes shown under the queue when an action is dropped for a reason the player can't see (roadmap 5).
++        private const int NOTICE_FRAMES = 150;
++        private List<(UILabel label, int frames)> Notices = new List<(UILabel, int)>();
++        private static readonly Color NoticeColor = new Color(255, 220, 140);
++
++        private void ShowDroppedNotice(UIIQTrackEntry itemui)
++        {
++            if (!Simitone.Client.Utils.SimitoneSettings.Default.QueueNotices) return;
++            var text = Simitone.Client.UI.Utils.UIQueueNotices.Take(QueueOwner, itemui.Interaction.UID);
++            if (text == null) return;
++            var label = new UILabel();
++            label.CaptionStyle = label.CaptionStyle.Clone();
++            label.CaptionStyle.Size = 12;
++            label.CaptionStyle.Shadow = true;
++            label.CaptionStyle.Color = NoticeColor;
++            label.Alignment = TextAlignment.Center | TextAlignment.Middle;
++            label.Caption = text;
++            label.Size = new Vector2(160, 20);
++            label.Position = itemui.UI.Position + new Vector2(-80, 30 + Notices.Count * 16);
++            Add(label);
++            Notices.Add((label, NOTICE_FRAMES));
++        }
++
++        private void UpdateNotices()
++        {
++            for (int i = 0; i < Notices.Count; i++)
++            {
++                var (label, frames) = Notices[i];
++                if (--frames <= 0)
++                {
++                    Remove(label);
++                    Notices.RemoveAt(i--);
++                    continue;
++                }
++                //hold, then fade out over the last second.
++                label.CaptionStyle.Color = NoticeColor * Math.Min(1f, frames / 60f);
++                Notices[i] = (label, frames);
++            }
+         }
+ 
+         public short GetElemPriority(VMQueuedAction elem, int i)
+@@ -50,6 +92,7 @@ namespace Simitone.Client.UI.Panels
+         public override void Update(UpdateState state)
+         {
+             base.Update(state);
++            UpdateNotices();
+             if (QueueOwner == null) return;
+             //detect any changes in the interaction queue.
+ 
+@@ -109,6 +152,7 @@ namespace Simitone.Client.UI.Panels
+                 }
+                 if (!found)
+                 {
++                    ShowDroppedNotice(itemui);
+                     itemui.UI.Kill();
+                     QueueItems.RemoveAt(i--); //not here anymore
+                 }
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UILotControl.cs b/Client/Simitone/Simitone.Client/UI/Panels/UILotControl.cs
+index 5e73ba1..f50b36c 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UILotControl.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UILotControl.cs
+@@ -74,6 +74,8 @@ namespace Simitone.Client.UI.Panels
+         public UIInteractionQueue Queue;
+ 
+         public bool LiveMode = true;
++        /// <summary>Buy/build undo history for this lot (roadmap 12); cleared on returning to live mode.</summary>
++        public Simitone.Client.Utils.BuildUndoStack BuildUndo = new Simitone.Client.Utils.BuildUndoStack();
+         public bool PanelActive = false;
+         public UILotControlTouchHelper Touch;
+         public UIArchTouchHelper ArchTouch;
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UILotControlTouchHelper.cs b/Client/Simitone/Simitone.Client/UI/Panels/UILotControlTouchHelper.cs
+index df7c253..073018e 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UILotControlTouchHelper.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UILotControlTouchHelper.cs
+@@ -69,13 +69,19 @@ namespace Simitone.Client.UI.Panels
+                     LastMouseWheel = state.MouseState.ScrollWheelValue;
+                     ScrollWheelInvalid = false;
+                 }
+-                if (state.WindowFocused && state.MouseState.ScrollWheelValue != LastMouseWheel)
++                var wheelDiff = (state.WindowFocused && state.MouseState.ScrollWheelValue != LastMouseWheel)
++                    ? state.MouseState.ScrollWheelValue - LastMouseWheel : 0;
++                //a scrollable panel under the mouse (the catalog) takes the wheel instead of the zoom. (roadmap 11)
++                var routed = Simitone.Client.UI.Utils.UIWheelRouting.Route(state.MouseState.Position, wheelDiff);
++                if (wheelDiff != 0)
+                 {
+-                    var diff = state.MouseState.ScrollWheelValue - LastMouseWheel;
+-                    Master.TargetZoom = Master.TargetZoom + diff / 1600f;
++                    if (!routed)
++                    {
++                        Master.TargetZoom = Master.TargetZoom + wheelDiff / 1600f;
++                        Master.TargetZoom = Math.Max(0.25f, Math.Min(Master.TargetZoom, 2));
++                        ZoomFreezeTime = 10;
++                    }
+                     LastMouseWheel = state.MouseState.ScrollWheelValue;
+-                    Master.TargetZoom = Math.Max(0.25f, Math.Min(Master.TargetZoom, 2));
+-                    ZoomFreezeTime = 10;
+                 }
+             }
+ 
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs b/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
+index f49aae5..ffa306a 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UIObjectHolder.cs
+@@ -238,6 +238,17 @@ namespace Simitone.Client.UI.Panels
+                                 x = pos.x,
+                                 y = pos.y
+                             });
++                            var real = Holding.RealEnt?.MultitileGroup?.BaseObject;
++                            if (real != null && Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo
++                                && (real.Position != pos || real.Direction != Holding.Dir))
++                            {
++                                ParentControl.BuildUndo.Push(new Simitone.Client.Utils.BuildUndoStack.MoveEntry()
++                                {
++                                    ObjectID = real.ObjectID, GUID = real.MultitileGroup.GUID,
++                                    From = real.Position, FromDir = real.Direction,
++                                    To = new LotTilePos(pos.x, pos.y, pos.Level), ToDir = Holding.Dir
++                                });
++                            }
+                         }
+                         else
+                         {
+@@ -269,6 +280,9 @@ namespace Simitone.Client.UI.Panels
+                                 x = pos.x,
+                                 y = pos.y
+                             });
++                            if (Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo)
++                                ParentControl.BuildUndo.Push(new Simitone.Client.Utils.BuildUndoStack.BuyEntry()
++                                    { GUID = GUID, Position = new LotTilePos(pos.x, pos.y, pos.Level), Dir = Holding.Dir });
+                         } else
+                         {
+                             Holding.MoveTarget = Holding.Group.BaseObject.ObjectID;
+diff --git a/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs b/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
+index 82d50ac..2cbc211 100644
+--- a/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
++++ b/Client/Simitone/Simitone.Client/UI/Screens/TS1GameScreen.cs
+@@ -46,6 +46,8 @@ namespace Simitone.Client.UI.Screens
+         public bool Desktop = !FSOEnvironment.SoftwareKeyboard;
+ 
+         public UILotControl LotControl { get; set; }
++        /// <summary>Keyboard camera shortcuts (roadmap 13); recreated for every lot, so saved views are per lot.</summary>
++        private Simitone.Client.UI.Utils.UICameraShortcuts CameraShortcuts = new Simitone.Client.UI.Utils.UICameraShortcuts();
+         public UISimitoneFrontend Frontend { get; set; }
+         private FSO.LotView.World World;
+         public FSO.SimAntics.VM vm { get; set; }
+@@ -367,6 +369,10 @@ namespace Simitone.Client.UI.Screens
+             }
+             base.Update(state);
+ 
++            if (!typing && InLot && Simitone.Client.Utils.SimitoneSettings.Default.CameraShortcuts)
++                CameraShortcuts.Update(state, World, LotControl);
++            if (InLot && LotControl != null) UpdateBuildUndo(state, typing);
++
+             if (!typing && state.NewKeys.Contains(Microsoft.Xna.Framework.Input.Keys.F12) && GraphicsModeControl.Mode != GlobalGraphicsMode.Full2D)
+             {
+                 GraphicsModeControl.ChangeMode((GraphicsModeControl.Mode == GlobalGraphicsMode.Full3D) ? GlobalGraphicsMode.Hybrid2D : GlobalGraphicsMode.Full3D);
+@@ -460,9 +466,26 @@ namespace Simitone.Client.UI.Screens
+ 
+         private VMMarshal SavedLot;
+ 
++        /// <summary>Ctrl+Z / Ctrl+Y (or Ctrl+Shift+Z) in buy and build mode, while nothing is held. (roadmap 12)</summary>
++        private void UpdateBuildUndo(FSO.Common.Rendering.Framework.Model.UpdateState state, bool typing)
++        {
++            var undo = LotControl.BuildUndo;
++            if (LotControl.LiveMode || !Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo)
++            {
++                undo.Clear();
++                return;
++            }
++            if (typing || !state.CtrlDown || LotControl.ObjectHolder.Holding != null || LotControl.CustomControl != null) return;
++            bool done = false;
++            if (state.NewKeys.Contains(Keys.Z) && !state.ShiftDown) done = undo.Undo(vm);
++            else if (state.NewKeys.Contains(Keys.Y) || (state.NewKeys.Contains(Keys.Z) && state.ShiftDown)) done = undo.Redo(vm);
++            if (done) FSO.HIT.HITVM.Get()?.PlaySoundEvent(FSO.Client.UI.Model.UISounds.ObjectMovePlace);
++        }
++
+         public void InitializeLot()
+         {
+             CleanupLastWorld();
++            CameraShortcuts = new Simitone.Client.UI.Utils.UICameraShortcuts();
+             World = new FSO.LotView.World(GameFacade.GraphicsDevice);
+ 
+             World.Opacity = 1;
+diff --git a/Client/Simitone/Simitone.Client/UI/Utils/UICameraShortcuts.cs b/Client/Simitone/Simitone.Client/UI/Utils/UICameraShortcuts.cs
+new file mode 100644
+index 0000000..4257967
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Utils/UICameraShortcuts.cs
+@@ -0,0 +1,116 @@
++using FSO.Common;
++using FSO.Common.Rendering.Framework.Model;
++using FSO.LotView;
++using FSO.LotView.Components;
++using FSO.LotView.Model;
++using FSO.SimAntics;
++using Microsoft.Xna.Framework;
++using Microsoft.Xna.Framework.Input;
++
++namespace Simitone.Client.UI.Utils
++{
++    /// <summary>
++    /// Keyboard camera shortcuts for live, buy and build mode (roadmap 13). Simitone had no keyboard panning and centred
++    /// on the selected Sim only once per lot load; switching Sims already recentres (VMNetChangeControlCmd).
++    ///   Arrow keys      pan (stops following)
++    ///   C               centre on the selected Sim
++    ///   F               follow the selected Sim (toggle; any scrolling stops it)
++    ///   Backspace       back to where the camera was before the last jump
++    ///   F5, F6, F7      jump to a saved view; Ctrl+F5/F6/F7 saves the current one (this session only)
++    /// Keys are free in Simitone (checked against every live-game key handler); callers skip this while typing.
++    /// </summary>
++    public class UICameraShortcuts
++    {
++        private struct View
++        {
++            public Vector2 Center;
++            public sbyte Level;
++            public WorldRotation Rotation;
++            public float Zoom;
++        }
++
++        private static readonly Keys[] BookmarkKeys = new Keys[] { Keys.F5, Keys.F6, Keys.F7 };
++        private View?[] Bookmarks = new View?[BookmarkKeys.Length];
++        private View? Previous;
++        private bool Following;
++
++        public void Update(UpdateState state, World world, Panels.UILotControl lotControl)
++        {
++            if (world == null || lotControl == null) return;
++            var ws = world.State;
++            var keys = state.NewKeys;
++            var sim = lotControl.ActiveEntity as VMAvatar;
++            var simUI = sim?.WorldUI as AvatarComponent;
++
++            //arrow key panning, at the same speed as edge scrolling.
++            var kb = state.KeyboardState;
++            var dir = Vector2.Zero;
++            if (kb.IsKeyDown(Keys.Up)) dir.Y -= 1;
++            if (kb.IsKeyDown(Keys.Down)) dir.Y += 1;
++            if (kb.IsKeyDown(Keys.Left)) dir.X -= 1;
++            if (kb.IsKeyDown(Keys.Right)) dir.X += 1;
++            if (dir != Vector2.Zero)
++            {
++                var basis = world.GetScrollBasis(true);
++                var move = dir.X * basis[0] + dir.Y * basis[1];
++                if (dir.X != 0 && dir.Y != 0) move *= new Vector2(1, 0.5f);
++                ws.CenterTile += move * 0.0625f * (60f / FSOEnvironment.RefreshRate);
++                ws.ScrollAnchor = null;
++            }
++
++            //any scroll (edge, drag, keys) clears the anchor: that ends following.
++            if (Following && ws.ScrollAnchor == null) Following = false;
++            //keep following across Sim switches.
++            if (Following && simUI != null && ws.ScrollAnchor != simUI) ws.ScrollAnchor = simUI;
++
++            if (keys.Contains(Keys.C) && !state.CtrlDown && !state.ShiftDown && simUI != null) //Ctrl+Shift+C opens the cheat box
++            {
++                Previous = Capture(ws, lotControl);
++                world.CenterTo(simUI);
++            }
++            if (keys.Contains(Keys.F) && simUI != null)
++            {
++                Following = !Following;
++                ws.ScrollAnchor = Following ? simUI : null;
++            }
++            if (keys.Contains(Keys.Back) && Previous != null)
++            {
++                var back = Previous.Value;
++                Previous = Capture(ws, lotControl);
++                Restore(back, world, lotControl);
++            }
++            for (int i = 0; i < BookmarkKeys.Length; i++)
++            {
++                if (!keys.Contains(BookmarkKeys[i])) continue;
++                if (state.CtrlDown) Bookmarks[i] = Capture(ws, lotControl);
++                else if (Bookmarks[i] != null)
++                {
++                    Previous = Capture(ws, lotControl);
++                    Restore(Bookmarks[i].Value, world, lotControl);
++                }
++            }
++        }
++
++        private static View Capture(WorldState ws, Panels.UILotControl lotControl)
++        {
++            return new View() { Center = ws.CenterTile, Level = ws.Level, Rotation = ws.Rotation, Zoom = lotControl.TargetZoom };
++        }
++
++        private void Restore(View view, World world, Panels.UILotControl lotControl)
++        {
++            var ws = world.State;
++            Following = false;
++            ws.ScrollAnchor = null;
++            //the rotation setter reprojects the centre, so rotate first (see WorldState).
++            if (ws.Rotation != view.Rotation)
++            {
++                ws.DisableSmoothRotation = true;
++                ws.Rotation = view.Rotation;
++                ws.DisableSmoothRotation = false;
++            }
++            lotControl.TargetZoom = view.Zoom;
++            if (ws.Level != view.Level) ws.Level = view.Level;
++            ws.CenterTile = view.Center;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/UI/Utils/UIQueueNotices.cs b/Client/Simitone/Simitone.Client/UI/Utils/UIQueueNotices.cs
+new file mode 100644
+index 0000000..cfa3ac6
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Utils/UIQueueNotices.cs
+@@ -0,0 +1,65 @@
++using FSO.SimAntics;
++using FSO.SimAntics.Diagnostics;
++using System.Collections.Generic;
++
++namespace Simitone.Client.UI.Utils
++{
++    /// <summary>
++    /// Remembers why recent queued actions ended (from VMDiagnostics.OnActionEnded), so the queue display can say why an
++    /// action disappeared instead of it just vanishing (roadmap 5). Only the reasons a player can't otherwise see get a
++    /// note: cancelled actions, actions that finished and route failures (which show a balloon) get none.
++    /// </summary>
++    public static class UIQueueNotices
++    {
++        private const int MAX_ENTRIES = 64;
++        private static readonly object Lock = new object();
++        private static Dictionary<(short, ushort), VMActionEndReason> Recent = new Dictionary<(short, ushort), VMActionEndReason>();
++        private static Queue<(short, ushort)> Order = new Queue<(short, ushort)>();
++        private static bool Hooked;
++
++        /// <summary>Starts listening. The event is raised on the VM thread, so access is locked.</summary>
++        public static void Hook()
++        {
++            if (Hooked) return;
++            Hooked = true;
++            VMDiagnostics.OnActionEnded += (ent, end) =>
++            {
++                if (Describe(end.Reason) == null) return;
++                lock (Lock)
++                {
++                    var key = (ent.ObjectID, end.UID);
++                    Recent[key] = end.Reason;
++                    Order.Enqueue(key);
++                    while (Order.Count > MAX_ENTRIES) Recent.Remove(Order.Dequeue());
++                }
++            };
++        }
++
++        /// <summary>The note for an action of this entity that just left the queue, or null if there is nothing to say.</summary>
++        public static string Take(VMEntity owner, ushort uid)
++        {
++            if (owner == null) return null;
++            VMActionEndReason reason;
++            lock (Lock)
++            {
++                var key = (owner.ObjectID, uid);
++                if (!Recent.TryGetValue(key, out reason)) return null;
++                Recent.Remove(key);
++            }
++            return Describe(reason);
++        }
++
++        public static string Describe(VMActionEndReason reason)
++        {
++            switch (reason)
++            {
++                case VMActionEndReason.CheckFailedAtStart: return "Can't do that now";
++                case VMActionEndReason.CalleeDeleted: return "Object is gone";
++                case VMActionEndReason.Pruned: return "Dropped with it";
++                case VMActionEndReason.OwnerDeadReset: return "Queue cleared";
++                case VMActionEndReason.Exception: return "Error: Sim reset";
++                default: return null;
++            }
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/UI/Utils/UIWheelRouting.cs b/Client/Simitone/Simitone.Client/UI/Utils/UIWheelRouting.cs
+new file mode 100644
+index 0000000..00af2a1
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/UI/Utils/UIWheelRouting.cs
+@@ -0,0 +1,64 @@
++using FSO.Client.UI.Framework;
++using Microsoft.Xna.Framework;
++using System;
++using System.Collections.Generic;
++
++namespace Simitone.Client.UI.Utils
++{
++    /// <summary>
++    /// The mouse wheel always zoomed the lot (UILotControlTouchHelper), even with the mouse over the buy/build
++    /// catalog, and nothing else could use it (roadmap 11). Scrollable panels register here every frame they are
++    /// updated; the lot control routes the wheel to the panel under the mouse instead of zooming.
++    /// A panel that stops being updated (hidden, closed) drops out after a frame.
++    /// </summary>
++    public static class UIWheelRouting
++    {
++        private class Target
++        {
++            public UIElement Element;
++            public Func<Vector2> Size;
++            public Action<int> OnWheel;
++            public int Frame;
++        }
++
++        private static List<Target> Targets = new List<Target>();
++        private static int Frame;
++
++        /// <summary>Call from the scrollable element's Update.</summary>
++        public static void Register(UIElement element, Func<Vector2> size, Action<int> onWheel)
++        {
++            var existing = Targets.Find(x => x.Element == element);
++            if (existing == null)
++            {
++                existing = new Target() { Element = element };
++                Targets.Add(existing);
++            }
++            existing.Size = size;
++            existing.OnWheel = onWheel;
++            existing.Frame = Frame;
++        }
++
++        /// <summary>
++        /// Called once per frame by the lot control with the wheel movement (0 if none). Returns true if a panel under
++        /// the mouse took it.
++        /// </summary>
++        public static bool Route(Point mouse, int wheelDelta)
++        {
++            Frame++;
++            Targets.RemoveAll(x => Frame - x.Frame > 2);
++            if (wheelDelta == 0) return false;
++            foreach (var target in Targets)
++            {
++                if (!target.Element.Visible) continue;
++                var local = target.Element.GlobalPoint(mouse.ToVector2());
++                var size = target.Size();
++                if (local.X >= 0 && local.Y >= 0 && local.X < size.X && local.Y < size.Y)
++                {
++                    target.OnWheel(wheelDelta);
++                    return true;
++                }
++            }
++            return false;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/BuildUndoStack.cs b/Client/Simitone/Simitone.Client/Utils/BuildUndoStack.cs
+new file mode 100644
+index 0000000..8e870d1
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/BuildUndoStack.cs
+@@ -0,0 +1,139 @@
++using FSO.LotView.Model;
++using FSO.SimAntics;
++using FSO.SimAntics.NetPlay.Model.Commands;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// Undo and redo for buy and build mode, phase 1: buying, moving and rotating objects (roadmap 12).
++    /// The original game has an undo manager (Sims.exe RTTI names UndoManager and Object/Wall/Floor/... Undoable
++    /// classes), so this restores a missing feature rather than adding a new one.
++    ///
++    /// Entries replay ordinary VM commands, so they go through the same checks as the player's own actions. Objects are
++    /// found again by GUID and position when needed (the VM doesn't tell the client which object a buy created, and an
++    /// undone-then-redone buy creates a new object ID). An entry whose object is gone or has been moved since is
++    /// dropped. The history is per lot and is cleared when leaving buy/build mode, as an undo after living with an
++    /// object would be a free refund.
++    /// Not covered yet: selling (needs the object restored with its state), walls, floors, roofs and terrain.
++    /// </summary>
++    public class BuildUndoStack
++    {
++        public abstract class Entry
++        {
++            public abstract bool Undo(VM vm);
++            public abstract bool Redo(VM vm);
++        }
++
++        private static VMEntity FindObject(VM vm, short hintID, uint guid, LotTilePos pos)
++        {
++            var hint = (hintID != 0) ? vm.GetObjectById(hintID) : null;
++            if (Matches(hint, guid, pos)) return hint;
++            return vm.Entities.FirstOrDefault(x => Matches(x, guid, pos));
++        }
++
++        private static bool Matches(VMEntity ent, uint guid, LotTilePos pos)
++        {
++            if (ent == null || ent.Dead || !(ent is VMGameObject)) return false;
++            var group = ent.MultitileGroup;
++            if (group == null || group.BaseObject != ent || group.GUID != guid) return false;
++            var p = ent.Position;
++            return p.x == pos.x && p.y == pos.y && p.Level == pos.Level;
++        }
++
++        public class BuyEntry : Entry
++        {
++            public uint GUID;
++            public LotTilePos Position;
++            public Direction Dir;
++
++            public override bool Undo(VM vm)
++            {
++                var obj = FindObject(vm, 0, GUID, Position);
++                if (obj == null) return false; //the purchase failed, or the object was moved or sold since.
++                vm.SendCommand(new VMNetUndoBuyCmd() { ObjectID = obj.ObjectID, GUID = GUID });
++                return true;
++            }
++
++            public override bool Redo(VM vm)
++            {
++                vm.SendCommand(new VMNetBuyObjectCmd() { GUID = GUID, dir = Dir, level = Position.Level, x = Position.x, y = Position.y });
++                return true;
++            }
++        }
++
++        public class MoveEntry : Entry
++        {
++            public short ObjectID;
++            public uint GUID;
++            public LotTilePos From;
++            public Direction FromDir;
++            public LotTilePos To;
++            public Direction ToDir;
++
++            private bool Move(VM vm, LotTilePos at, LotTilePos dest, Direction dir)
++            {
++                var obj = FindObject(vm, ObjectID, GUID, at);
++                if (obj == null) return false;
++                ObjectID = obj.ObjectID;
++                vm.SendCommand(new VMNetMoveObjectCmd() { ObjectID = obj.ObjectID, dir = dir, level = dest.Level, x = dest.x, y = dest.y });
++                return true;
++            }
++
++            public override bool Undo(VM vm) => Move(vm, To, From, FromDir);
++            public override bool Redo(VM vm) => Move(vm, From, To, ToDir);
++        }
++
++        private const int MAX_ENTRIES = 100;
++        private List<Entry> UndoList = new List<Entry>();
++        private List<Entry> RedoList = new List<Entry>();
++
++        public bool CanUndo => UndoList.Count > 0;
++        public bool CanRedo => RedoList.Count > 0;
++
++        public void Push(Entry entry)
++        {
++            UndoList.Add(entry);
++            if (UndoList.Count > MAX_ENTRIES) UndoList.RemoveAt(0);
++            RedoList.Clear();
++        }
++
++        public void Clear()
++        {
++            UndoList.Clear();
++            RedoList.Clear();
++        }
++
++        /// <summary>Undoes the most recent action that can still be undone. Returns false if there was none.</summary>
++        public bool Undo(VM vm)
++        {
++            while (UndoList.Count > 0)
++            {
++                var entry = UndoList[UndoList.Count - 1];
++                UndoList.RemoveAt(UndoList.Count - 1);
++                if (entry.Undo(vm))
++                {
++                    RedoList.Add(entry);
++                    return true;
++                }
++            }
++            return false;
++        }
++
++        public bool Redo(VM vm)
++        {
++            while (RedoList.Count > 0)
++            {
++                var entry = RedoList[RedoList.Count - 1];
++                RedoList.RemoveAt(RedoList.Count - 1);
++                if (entry.Redo(vm))
++                {
++                    UndoList.Add(entry);
++                    return true;
++                }
++            }
++            return false;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/CatalogSearchIndex.cs b/Client/Simitone/Simitone.Client/Utils/CatalogSearchIndex.cs
+new file mode 100644
+index 0000000..31c9736
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/CatalogSearchIndex.cs
+@@ -0,0 +1,94 @@
++using FSO.Content;
++using FSO.Content.Interfaces;
++using FSO.Files.Formats.IFF.Chunks;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// Text search over the buy catalog (roadmap 11). The TS1 catalog entries only carry the internal OBJD label as
++    /// Name (TS1ObjectProvider never fills CatalogName), so the localised name and description are read from each
++    /// object's catalog strings (CTSS, string 0 and 1), as the query panel does. Built once, on the first search,
++    /// because it loads every catalog object's resource.
++    /// Nothing new is authored: only existing names and descriptions are searched.
++    /// </summary>
++    public static class CatalogSearchIndex
++    {
++        public class Entry
++        {
++            public ObjectCatalogItem Item;
++            public string Name;
++            public string Description;
++            public string Label;
++        }
++
++        private static List<Entry> Entries;
++
++        public static List<Entry> All
++        {
++            get
++            {
++                if (Entries == null) Build();
++                return Entries;
++            }
++        }
++
++        private static void Build()
++        {
++            var list = new List<Entry>();
++            var content = Content.Get();
++            foreach (var item in content.WorldCatalog.All())
++            {
++                string name = null, desc = null;
++                try
++                {
++                    var obj = content.WorldObjects.Get(item.GUID);
++                    var ctss = obj?.Resource?.Get<CTSS>(obj.OBJ.CatalogStringsID);
++                    name = ctss?.GetString(0);
++                    desc = ctss?.GetString(1);
++                }
++                catch (Exception)
++                {
++                    //a broken custom object: fall back to its label.
++                }
++                list.Add(new Entry()
++                {
++                    Item = item,
++                    Name = (name ?? item.Name ?? "").ToLowerInvariant(),
++                    Description = (desc ?? "").ToLowerInvariant(),
++                    Label = (item.Name ?? "").ToLowerInvariant()
++                });
++            }
++            Entries = list;
++        }
++
++        /// <summary>
++        /// Catalog items passing the filter whose name, description or label contain every word of the query. Names that
++        /// start with the query come first, then other name matches, then description-only matches; cheaper first within
++        /// each group (the catalog's own order).
++        /// </summary>
++        public static List<ObjectCatalogItem> Find(string query, Func<ObjectCatalogItem, bool> filter)
++        {
++            var words = (query ?? "").ToLowerInvariant().Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
++            if (words.Length == 0) return new List<ObjectCatalogItem>();
++            var whole = string.Join(" ", words);
++            return All
++                .Where(x => filter(x.Item) && words.All(w => x.Name.Contains(w) || x.Description.Contains(w) || x.Label.Contains(w)))
++                .Select(x => new { x.Item, Rank = Rank(x, words, whole) })
++                .OrderBy(x => x.Rank)
++                .ThenBy(x => x.Item.Price)
++                .Select(x => x.Item)
++                .ToList();
++        }
++
++        public static int Rank(Entry entry, string[] words, string whole)
++        {
++            if (entry.Name.StartsWith(whole)) return 0;
++            if (words.All(w => entry.Name.Contains(w))) return 1;
++            if (words.Any(w => entry.Name.Contains(w))) return 2;
++            return 3;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+index aa984e7..dee3e10 100644
+--- a/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettings.cs
+@@ -39,6 +39,18 @@ namespace Simitone.Client.Utils
+             { "QueueFixes", "true" },
+             { "DynamicObstacles", "true" },
+             { "Unstick", "true" },
++            { "ApproachPositions", "true" },
++            { "ObjectSelection", "true" },
++            { "AutonomyFixes", "true" },
++            { "AutonomyCountOnce", "true" },
++            { "QueueRecovery", "true" },
++            { "Conversations", "true" },
++
++            //interface
++            { "QueueNotices", "true" },
++            { "CameraShortcuts", "true" },
++            { "CatalogSearch", "true" },
++            { "BuildUndo", "true" },
+ 
+             //debugging
+             { "Diagnostics", "true" },
+@@ -66,6 +78,17 @@ namespace Simitone.Client.Utils
+         public bool QueueFixes { get; set; }
+         public bool DynamicObstacles { get; set; }
+         public bool Unstick { get; set; }
++        public bool ApproachPositions { get; set; }
++        public bool ObjectSelection { get; set; }
++        public bool AutonomyFixes { get; set; }
++        public bool AutonomyCountOnce { get; set; }
++        public bool QueueRecovery { get; set; }
++        public bool Conversations { get; set; }
++
++        public bool QueueNotices { get; set; }
++        public bool CameraShortcuts { get; set; }
++        public bool CatalogSearch { get; set; }
++        public bool BuildUndo { get; set; }
+ 
+         public bool Diagnostics { get; set; }
+         public bool DrawRoutes { get; set; }
+@@ -89,6 +112,12 @@ namespace Simitone.Client.Utils
+             VMFeatures.QueueFixes = QueueFixes;
+             VMFeatures.DynamicObstacles = DynamicObstacles;
+             VMFeatures.Unstick = Unstick;
++            VMFeatures.ApproachPositions = ApproachPositions;
++            VMFeatures.ObjectSelection = ObjectSelection;
++            VMFeatures.AutonomyFixes = AutonomyFixes;
++            VMFeatures.AutonomyCountOnce = AutonomyCountOnce;
++            VMFeatures.QueueRecovery = QueueRecovery;
++            VMFeatures.Conversations = Conversations;
+             VMFeatures.Diagnostics = Diagnostics;
+             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
+         }
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+index a2bfabc..55c6470 100644
+--- a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+@@ -38,7 +38,7 @@ namespace Simitone.Client.Utils
+     public static class SimitoneSettingsRegistry
+     {
+         public const string SIMULATION = "Simulation";
+-        public const string CONTROLS = "Camera & Controls";
++        public const string CONTROLS = "Interface";
+         public const string SOUND = "Sound";
+         public const string DISPLAY = "Display";
+         public const string DEBUG = "Debug";
+@@ -115,10 +115,40 @@ namespace Simitone.Client.Utils
+             list.Add(Toggle(SIMULATION, "Free stuck Sims",
+                 "A Sim squeezed against an object steps out instead of failing every route.",
+                 () => S.Unstick, (v) => { S.Unstick = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Smarter approach positions",
++                "Skip seats someone sits in; re-check the other spots when one fails.",
++                () => S.ApproachPositions, (v) => { S.ApproachPositions = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Avoid unreachable objects",
++                "When a task needs an object, prefer reachable ones that did not just fail.",
++                () => S.ObjectSelection, (v) => { S.ObjectSelection = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Free will fixes",
++                "Free will respects object cooldowns and avoids unreachable or failed objects.",
++                () => S.AutonomyFixes, (v) => { S.AutonomyFixes = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Free will: count each action once",
++                "Balance change: actions with several menu entries no longer get extra chances.",
++                () => S.AutonomyCountOnce, (v) => { S.AutonomyCountOnce = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Keep the queue when an object vanishes",
++                "Only the action on a deleted object is dropped, not the whole queue.",
++                () => S.QueueRecovery, (v) => { S.QueueRecovery = v; SaveS(); }, departure: true));
++            list.Add(Toggle(SIMULATION, "Respect conversations",
++                "Free will waits for chatting Sims instead of shooing them; follow Sims who walk off.",
++                () => S.Conversations, (v) => { S.Conversations = v; SaveS(); }, departure: true));
+ 
+             //--- camera and controls
+             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
+                 () => G.EdgeScroll, (v) => { G.EdgeScroll = v; G.Save(); }));
++            list.Add(Toggle(CONTROLS, "Camera shortcuts",
++                "Arrows pan, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).",
++                () => S.CameraShortcuts, (v) => { S.CameraShortcuts = v; S.Save(); }, departure: true));
++            list.Add(Toggle(CONTROLS, "Catalog search and wheel scrolling",
++                "Search box in the buy catalog; the mouse wheel scrolls the catalog when over it. Reopen the catalog to apply.",
++                () => S.CatalogSearch, (v) => { S.CatalogSearch = v; S.Save(); }, departure: true));
++            list.Add(Toggle(CONTROLS, "Undo in buy and build mode",
++                "Ctrl+Z undoes buying, moving and rotating objects (full refund), Ctrl+Y redoes. Cleared in live mode.",
++                () => S.BuildUndo, (v) => { S.BuildUndo = v; S.Save(); }, departure: true));
++            list.Add(Toggle(CONTROLS, "Say why actions were dropped",
++                "A short note under the queue when an action is dropped (can't start, object gone).",
++                () => S.QueueNotices, (v) => { S.QueueNotices = v; S.Save(); }, departure: true));
+ 
+             //--- sound
+             list.Add(Volume("Music volume", () => G.MusicVolume, (v) => G.MusicVolume = (byte)v, HITVolumeGroup.MUSIC));
+diff --git a/Tests/Simitone.Routing.Tests/Program.cs b/Tests/Simitone.Routing.Tests/Program.cs
+index 3080088..1f4d4e5 100644
+--- a/Tests/Simitone.Routing.Tests/Program.cs
++++ b/Tests/Simitone.Routing.Tests/Program.cs
+@@ -13,7 +13,8 @@ namespace Simitone.Routing.Tests
+         {
+             int failed = 0, total = 0;
+             var tests = ShimmyPlannerTests.All()
+-                .Concat(DiagnosticsTests.All());
++                .Concat(DiagnosticsTests.All())
++                .Concat(SelectionTests.All());
+             foreach (var (name, test) in tests)
+             {
+                 total++;
+diff --git a/Tests/Simitone.Routing.Tests/SelectionTests.cs b/Tests/Simitone.Routing.Tests/SelectionTests.cs
+new file mode 100644
+index 0000000..b19970b
+--- /dev/null
++++ b/Tests/Simitone.Routing.Tests/SelectionTests.cs
+@@ -0,0 +1,66 @@
++using FSO.SimAntics.Engine.Routing;
++using System;
++using System.Collections.Generic;
++using System.Linq;
++
++namespace Simitone.Routing.Tests
++{
++    /// <summary>
++    /// Room reachability and route failure memory, used by object selection and free will (roadmap 4 and 6).
++    /// </summary>
++    public static class SelectionTests
++    {
++        private static void Check(bool cond, string msg)
++        {
++            if (!cond) throw new Exception(msg);
++        }
++
++        private static Func<ushort, IEnumerable<ushort>> Graph(params (ushort from, ushort to)[] edges)
++        {
++            return (room) => edges.Where(x => x.from == room).Select(x => x.to);
++        }
++
++        public static IEnumerable<(string, Action)> All()
++        {
++            yield return ("reachability follows portals and stops at rooms with no way in", () =>
++            {
++                //1 <-> 2 <-> 3 (a house with two doors), 4 walled in, 5 only has a way out (into 3)
++                var g = Graph((1, 2), (2, 1), (2, 3), (3, 2), (5, 3));
++                var rooms = VMReachability.Flood(1, 6, g);
++                Check(rooms.SetEquals(new ushort[] { 1, 2, 3 }), "from 1: " + string.Join(",", rooms));
++                Check(VMReachability.Flood(4, 6, g).SetEquals(new ushort[] { 4 }), "walled in room reaches only itself");
++                Check(VMReachability.Flood(5, 6, g).SetEquals(new ushort[] { 5, 3, 2, 1 }), "one-way portal is followed");
++            });
++
++            yield return ("reachability is unknown (null) from room 0 or a room out of range", () =>
++            {
++                var g = Graph((1, 2));
++                Check(VMReachability.Flood(0, 3, g) == null, "room 0");
++                Check(VMReachability.Flood(7, 3, g) == null, "out of range");
++                var rooms = VMReachability.Flood(1, 3, Graph((1, 0), (1, 9), (1, 2)));
++                Check(rooms.SetEquals(new ushort[] { 1, 2 }), "portals to room 0 or out of range are ignored: " + string.Join(",", rooms));
++            });
++
++            yield return ("route failure memory expires after one Sim hour", () =>
++            {
++                var m = new VMRouteFailMemory();
++                m.Add(new short[] { 10, 11 }, 100);
++                Check(m.Contains(10, 100) && m.Contains(11, 100 + VMRouteFailMemory.DURATION - 1), "remembered within the hour");
++                Check(!m.Contains(12, 100), "other objects are not remembered");
++                Check(!m.Contains(10, 100 + VMRouteFailMemory.DURATION), "forgotten after the hour");
++                Check(m.Count == 1, "expired entry removed when looked up, count " + m.Count);
++                m.Add(new short[] { 11 }, 5000);
++                Check(m.Contains(11, 5000 + VMRouteFailMemory.DURATION - 1), "a new failure extends the memory");
++            });
++
++            yield return ("route failure memory keeps at most 32 objects, dropping the oldest", () =>
++            {
++                var m = new VMRouteFailMemory();
++                for (short i = 1; i <= 40; i++) m.Add(new short[] { i }, (uint)i);
++                Check(m.Count == 32, "count " + m.Count);
++                Check(!m.Contains(1, 41) && !m.Contains(8, 41), "oldest dropped");
++                Check(m.Contains(9, 41) && m.Contains(40, 41), "newest kept");
++            });
++        }
++    }
++}
+-- 
+2.43.0
