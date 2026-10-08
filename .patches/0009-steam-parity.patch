@@ -1,0 +1,397 @@
+From f23bb8462da906447c268a6ddf4e6e529bd6b252 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Thu, 8 Oct 2026 23:24:42 +0200
+Subject: [PATCH] Steam Legacy Collection parity: validated game locator, save
+ import, language
+
+- Locator: every candidate must contain GameData/Behavior.iff (a stale Maxis registry key no longer wins over a working Steam install); Steam lookup also reads HKCU SteamPath; a clear message replaces the silent exit when no game is found or -path is wrong.
+- Saves: the Legacy Collection writes to Saved Games/Electronic Arts/The Sims 25/UserData*, not its install. Simitone now imports from there when the install is a Legacy Collection.
+- Settings: 'Re-import saves from The Sims' (restart) sets Simitone's neighbourhood copies aside (renamed, not deleted) and imports again.
+- Language: when never chosen, follow SIMS_LANGUAGE of the installed game.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_019q6m8f542cVUMKg755aFtZ
+---
+ .../UI/Panels/UISettingsDialog.cs             | 13 +++-
+ .../Simitone.Client/Utils/SaveImport.cs       | 53 +++++++++++++
+ .../Utils/SimitoneSettingsRegistry.cs         | 12 +++
+ .../GameLocator/GameInstall.cs                | 74 +++++++++++++++++++
+ .../GameLocator/KnownFolders.cs               | 31 ++++++++
+ .../GameLocator/SteamGameFinder.cs            |  5 ++
+ .../GameLocator/WindowsLocator.cs             | 44 ++++++-----
+ Client/Simitone/Simitone.Windows/Program.cs   | 18 +++++
+ tools/freeso.ref                              |  2 +-
+ 9 files changed, 230 insertions(+), 22 deletions(-)
+ create mode 100644 Client/Simitone/Simitone.Client/Utils/SaveImport.cs
+ create mode 100644 Client/Simitone/Simitone.Windows/GameLocator/GameInstall.cs
+ create mode 100644 Client/Simitone/Simitone.Windows/GameLocator/KnownFolders.cs
+
+diff --git a/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs b/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
+index 1ec81fc..576dbd4 100644
+--- a/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
++++ b/Client/Simitone/Simitone.Client/UI/Panels/UISettingsDialog.cs
+@@ -155,9 +155,18 @@ namespace Simitone.Client.UI.Panels
+             var right = ContentX + ContentWidth;
+             if (item.Action != null)
+             {
+-                var action = new UIFlatButton(item.ActionLabel ?? "Run", new Vector2(300, 40), 17);
++                var action = new UIFlatButton(item.ActionState?.Invoke() ?? item.ActionLabel ?? "Run", new Vector2(300, 40), 17);
+                 action.Position = new Vector2(right - 300, y + 4);
+-                action.OnClick += (b) => { item.Action(); };
++                action.OnClick += (b) =>
++                {
++                    item.Action();
++                    if (item.ActionState != null) action.Caption = item.ActionState();
++                    if (item.RestartRequired && !RestartPending)
++                    {
++                        RestartPending = true;
++                        Refresh();
++                    }
++                };
+                 Rows.Add(action);
+                 return;
+             }
+diff --git a/Client/Simitone/Simitone.Client/Utils/SaveImport.cs b/Client/Simitone/Simitone.Client/Utils/SaveImport.cs
+new file mode 100644
+index 0000000..ee04be7
+--- /dev/null
++++ b/Client/Simitone/Simitone.Client/Utils/SaveImport.cs
+@@ -0,0 +1,53 @@
++using FSO.Common;
++using System;
++using System.IO;
++
++namespace Simitone.Client.Utils
++{
++    /// <summary>
++    /// Simitone keeps its own copy of the neighbourhoods (its lot saves aren't compatible with the original game), made
++    /// from the original game's saves the first time each one is used. Once made it is never refreshed, so saves the
++    /// player makes in the original game afterwards don't show up. This lets the player ask for a fresh copy.
++    /// The existing copies are renamed, never deleted.
++    /// </summary>
++    public static class SaveImport
++    {
++        private static string FlagPath => Path.Combine(FSOEnvironment.UserDir, "reimport-saves.flag");
++
++        public static bool Pending => File.Exists(FlagPath);
++
++        public static void Request()
++        {
++            File.WriteAllText(FlagPath, "Simitone will set aside its neighbourhood copies and import them again from the original game on the next start.");
++        }
++
++        public static void Cancel()
++        {
++            if (File.Exists(FlagPath)) File.Delete(FlagPath);
++        }
++
++        /// <summary>Call at start-up, before anything loads a neighbourhood. Returns the number of folders set aside.</summary>
++        public static int ApplyPending()
++        {
++            if (!Pending) return 0;
++            int moved = 0;
++            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
++            try
++            {
++                foreach (var dir in Directory.GetDirectories(FSOEnvironment.UserDir, "UserData*"))
++                {
++                    var name = Path.GetFileName(dir);
++                    if (name.Contains(".backup-")) continue;
++                    Directory.Move(dir, dir + ".backup-" + stamp);
++                    moved++;
++                }
++                Cancel();
++            }
++            catch (Exception e)
++            {
++                Console.WriteLine("Could not set aside Simitone's neighbourhood copies: " + e.Message);
++            }
++            return moved;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+index 55c6470..041c76c 100644
+--- a/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
++++ b/Client/Simitone/Simitone.Client/Utils/SimitoneSettingsRegistry.cs
+@@ -27,6 +27,8 @@ namespace Simitone.Client.Utils
+         /// <summary>For action rows (a button, no value): run when clicked.</summary>
+         public Action Action;
+         public string ActionLabel;
++        /// <summary>Optional: the action button's text, re-read after each click (for actions that toggle something).</summary>
++        public Func<string> ActionState;
+ 
+         public static readonly string[] OffOn = new string[] { "Off", "On" };
+     }
+@@ -207,6 +209,16 @@ namespace Simitone.Client.Utils
+                 Set = (i) => { G.LanguageCode = (byte)(i + 1); G.Save(); }
+             });
+ 
++            list.Add(new SimitoneSettingDef()
++            {
++                Section = CONTROLS, Label = "Re-import saves from The Sims",
++                Help = "Simitone works on its own copy of your neighbourhoods. This sets the copy aside (renamed, not deleted) and imports your original game's saves again.",
++                RestartRequired = true,
++                ActionLabel = "Re-import",
++                ActionState = () => SaveImport.Pending ? "Will re-import on restart (click to cancel)" : "Re-import",
++                Action = () => { if (SaveImport.Pending) SaveImport.Cancel(); else SaveImport.Request(); }
++            });
++
+             //--- debug
+             list.Add(Toggle(DEBUG, "Draw routes", "Show route rectangles, paths and shimmy gaps (also: draw_routes cheat).",
+                 () => S.DrawRoutes, (v) => { S.DrawRoutes = v; SaveS(); }));
+diff --git a/Client/Simitone/Simitone.Windows/GameLocator/GameInstall.cs b/Client/Simitone/Simitone.Windows/GameLocator/GameInstall.cs
+new file mode 100644
+index 0000000..0f06ea6
+--- /dev/null
++++ b/Client/Simitone/Simitone.Windows/GameLocator/GameInstall.cs
+@@ -0,0 +1,74 @@
++using Microsoft.Win32;
++using System;
++using System.Collections.Generic;
++using System.IO;
++
++namespace Simitone.Windows.GameLocator
++{
++    /// <summary>
++    /// Finding and checking a The Sims 1 install, and where that install keeps the player's saves.
++    ///
++    /// The classic game (Maxis registry key) keeps saves in its own folder (UserData*). The Steam Legacy Collection
++    /// (app 3314060, Sims.exe 1.10.x) keeps them in Saved Games/Electronic Arts/The Sims 25/UserData* and leaves the
++    /// install's UserData* as a pristine template (CONFIRMED by inspecting a Steam install after one save).
++    /// </summary>
++    public static class GameInstall
++    {
++        public static bool IsValid(string dir)
++        {
++            try { return !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, "GameData", "Behavior.iff")); }
++            catch (Exception) { return false; }
++        }
++
++        /// <summary>The Legacy Collection ships an EA Desktop SDK manifest next to the exe; the classic game never has one.</summary>
++        public static bool IsLegacyCollection(string dir)
++        {
++            try { return !string.IsNullOrEmpty(dir) && File.Exists(Path.Combine(dir, "eadpsdk.json")); }
++            catch (Exception) { return false; }
++        }
++
++        /// <summary>
++        /// Folders to look in for a player's saves, best first. A folder only counts if it holds a Neighborhood.iff
++        /// (checked by the neighbourhood provider); the install itself is always the last resort.
++        /// </summary>
++        public static List<string> SaveRoots(string installDir)
++        {
++            var roots = new List<string>();
++            if (IsLegacyCollection(installDir))
++            {
++                var saved = KnownFolders.SavedGames();
++                if (saved != null) roots.Add(Path.Combine(saved, "Electronic Arts", "The Sims 25"));
++                roots.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Electronic Arts", "The Sims 25"));
++            }
++            return roots;
++        }
++
++        private static readonly string[] LanguageNames = new string[]
++        {
++            //index = STRLangCode - 1; names as used by SIMS_LANGUAGE (LIKELY, from Sims.exe strings; numbers are accepted too).
++            "USEnglish", "UKEnglish", "French", "German", "Italian", "Spanish", "Dutch", "Danish", "Swedish", "Norwegian",
++            "Finnish", "Hebrew", "Russian", "Portuguese", "Japanese", "Polish", "SimplifiedChinese", "TraditionalChinese",
++            "Thai", "Korean"
++        };
++
++        /// <summary>The language the installed game was set to, as a STRLangCode, or 0 if it can't be told.</summary>
++        public static byte InstalledLanguage()
++        {
++            foreach (var key in new[] { @"HKEY_CURRENT_USER\Software\Electronic Arts\The Sims 25", @"HKEY_LOCAL_MACHINE\SOFTWARE\Maxis\The Sims", @"HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Maxis\The Sims" })
++            {
++                try
++                {
++                    var value = Registry.GetValue(key, "SIMS_LANGUAGE", null);
++                    if (value == null) continue;
++                    if (value is int i && i > 0 && i <= LanguageNames.Length) return (byte)i;
++                    var text = value.ToString().Replace(" ", "");
++                    if (byte.TryParse(text, out var num) && num > 0 && num <= LanguageNames.Length) return num;
++                    var index = Array.FindIndex(LanguageNames, x => x.Equals(text, StringComparison.OrdinalIgnoreCase));
++                    if (index >= 0) return (byte)(index + 1);
++                }
++                catch (Exception) { }
++            }
++            return 0;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Windows/GameLocator/KnownFolders.cs b/Client/Simitone/Simitone.Windows/GameLocator/KnownFolders.cs
+new file mode 100644
+index 0000000..9dc3a1a
+--- /dev/null
++++ b/Client/Simitone/Simitone.Windows/GameLocator/KnownFolders.cs
+@@ -0,0 +1,31 @@
++using System;
++using System.IO;
++using System.Runtime.InteropServices;
++
++namespace Simitone.Windows.GameLocator
++{
++    public static class KnownFolders
++    {
++        private static readonly Guid SavedGamesId = new Guid("4C5C32FF-BB9D-43B0-B5B4-2D72E54EAAA4");
++
++        [DllImport("shell32.dll")]
++        private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid rfid, uint flags, IntPtr token, out IntPtr path);
++
++        /// <summary>The Saved Games folder (it can be redirected, so it is asked for rather than assumed), or null.</summary>
++        public static string SavedGames()
++        {
++            try
++            {
++                if (SHGetKnownFolderPath(SavedGamesId, 0, IntPtr.Zero, out var ptr) == 0)
++                {
++                    var path = Marshal.PtrToStringUni(ptr);
++                    Marshal.FreeCoTaskMem(ptr);
++                    return path;
++                }
++            }
++            catch (Exception) { }
++            var fallback = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Saved Games");
++            return fallback;
++        }
++    }
++}
+diff --git a/Client/Simitone/Simitone.Windows/GameLocator/SteamGameFinder.cs b/Client/Simitone/Simitone.Windows/GameLocator/SteamGameFinder.cs
+index a875974..d89fc07 100644
+--- a/Client/Simitone/Simitone.Windows/GameLocator/SteamGameFinder.cs
++++ b/Client/Simitone/Simitone.Windows/GameLocator/SteamGameFinder.cs
+@@ -15,6 +15,11 @@ namespace Simitone.Windows.GameLocator
+         private static readonly Lazy<string> SteamInstallPath = new(() =>
+         {
+             string path = Registry.GetValue(SteamRegistryPath, "InstallPath", null)?.ToString();
++            if (!Directory.Exists(path))
++            {
++                //a per-user (or portable) Steam only has the HKCU entry.
++                path = Registry.GetValue(@"HKEY_CURRENT_USER\Software\Valve\Steam", "SteamPath", null)?.ToString();
++            }
+             return Directory.Exists(path) ? path : null;
+         }, isThreadSafe: true);
+ 
+diff --git a/Client/Simitone/Simitone.Windows/GameLocator/WindowsLocator.cs b/Client/Simitone/Simitone.Windows/GameLocator/WindowsLocator.cs
+index f857f6d..7f9954e 100644
+--- a/Client/Simitone/Simitone.Windows/GameLocator/WindowsLocator.cs
++++ b/Client/Simitone/Simitone.Windows/GameLocator/WindowsLocator.cs
+@@ -37,33 +37,39 @@ namespace Simitone.Windows.GameLocator
+         }
+ 
+         public string FindTheSims1()
++        {
++            //every candidate must actually hold the game data: a stale registry key (uninstalled or moved game) used to
++            //win over a working Steam install. Order is unchanged otherwise: next to the exe, classic registry key, Steam.
++            foreach (var candidate in Candidates())
++            {
++                if (GameInstall.IsValid(candidate)) return candidate;
++            }
++            return null; //Program reports it.
++        }
++
++        private IEnumerable<string> Candidates()
+         {
+             // Search relative directory similar to how macOS and Linux works; allows portability
+-            string localDir = @"../The Sims/";
+-            if (File.Exists(Path.Combine(localDir, "GameData", "Behavior.iff"))) return localDir;
++            yield return @"../The Sims/";
+ 
+-            using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
++            string registered = null;
++            try
+             {
+-                //Find the path to TS1 on the user's system.
+-                RegistryKey softwareKey = hklm.OpenSubKey("SOFTWARE");
+-
+-                if (Array.Exists(softwareKey.GetSubKeyNames(), delegate (string s) { return s.Equals("Maxis", StringComparison.InvariantCultureIgnoreCase); }))
++                using (var hklm = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, RegistryView.Registry32))
++                using (var key = hklm.OpenSubKey(@"SOFTWARE\Maxis\The Sims"))
+                 {
+-                    RegistryKey maxisKey = softwareKey.OpenSubKey("Maxis");
+-                    if (Array.Exists(maxisKey.GetSubKeyNames(), delegate (string s) { return s.Equals("The Sims", StringComparison.InvariantCultureIgnoreCase); }))
+-                    {
+-                        RegistryKey tsoKey = maxisKey.OpenSubKey("The Sims");
+-                        string installDir = (string)tsoKey.GetValue("InstallPath");
+-                        installDir += "\\";
+-                        return installDir.Replace('\\', '/');
+-                    }
++                    var dir = key?.GetValue("InstallPath") as string;
++                    if (!string.IsNullOrEmpty(dir)) registered = dir.TrimEnd('\\', '/').Replace('\\', '/') + "/";
+                 }
+             }
+-            // Check for Steam Legacy Collection install
+-            if (FindTheSimsLegacySteam() is string steamInstallDir) return steamInstallDir;
++            catch (Exception) { }
++            if (registered != null) yield return registered;
++
++            // Steam Legacy Collection install
++            var steam = FindTheSimsLegacySteam();
++            if (steam != null) yield return steam;
+ 
+-            // Fall back to the default install location if the other two checks fail
+-            return @"C:\Program Files (x86)\Maxis\The Sims\".Replace('\\', '/');
++            yield return @"C:\Program Files (x86)\Maxis\The Sims\".Replace('\\', '/');
+         }
+ 
+         /// <summary>
+diff --git a/Client/Simitone/Simitone.Windows/Program.cs b/Client/Simitone/Simitone.Windows/Program.cs
+index 4e64f1f..64ab1c1 100644
+--- a/Client/Simitone/Simitone.Windows/Program.cs
++++ b/Client/Simitone/Simitone.Windows/Program.cs
+@@ -45,6 +45,7 @@ namespace Simitone.Windows
+                 gameLocator = new WindowsLocator();
+ 
+             var path = gameLocator.FindTheSims1();
++            bool pathGiven = false;
+ 
+             //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
+             //created next to the exe instead of in Documents/Simitone.
+@@ -107,12 +108,27 @@ namespace Simitone.Windows
+                                 break;
+                             case string s when s.StartsWith("path"): //The Sims path
+                                 path = s.Length > 4 ? s.Substring(4).Trim('"').Replace('\\', '/') + "/" : path;
++                                pathGiven = s.Length > 4;
+                                 break;
+                         }
+                     }
+                 }
+             }
+             #endregion
++            if (path == null || (pathGiven && !GameInstall.IsValid(path)))
++            {
++                //nothing to start with: say why instead of closing silently.
++                MessageBox.Show("Simitone could not find The Sims 1 (no GameData/Behavior.iff in " + (path ?? "any known install location") + ").\n\n" +
++                    "Start Simitone with -path\"C:\\path\\to\\The Sims\" to point it at the game folder " +
++                    "(for Steam: ...\\steamapps\\common\\The Sims Legacy Collection).", "Simitone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
++                return;
++            }
++
++            //original-game saves: where the install keeps them (Steam's Legacy Collection keeps them outside the install),
++            //and a requested re-import has to happen before any neighbourhood is loaded.
++            Simitone.Client.Utils.SaveImport.ApplyPending();
++            FSO.Content.TS1.TS1NeighborhoodProvider.SaveImportRoots = GameInstall.SaveRoots(path);
++
+             useDX = MonogameLinker.Link(useDX);
+ 
+             FSO.Files.ImageLoaderHelpers.BitmapFunction = BitmapReader;
+@@ -128,6 +144,8 @@ namespace Simitone.Windows
+                 FSOEnvironment.Linux = false;
+                 FSOEnvironment.DirectX = useDX;
+                 FSOEnvironment.GameThread = Thread.CurrentThread;
++                //never chosen in Simitone: follow the language the installed game was set to.
++                if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = GameInstall.InstalledLanguage();
+                 if (GlobalSettings.Default.LanguageCode == 0) GlobalSettings.Default.LanguageCode = 1;
+                 FSO.Files.Formats.IFF.Chunks.STR.DefaultLangCode = (FSO.Files.Formats.IFF.Chunks.STRLangCode)GlobalSettings.Default.LanguageCode;
+ 
+diff --git a/tools/freeso.ref b/tools/freeso.ref
+index 04221ac..4ac908c 100644
+--- a/tools/freeso.ref
++++ b/tools/freeso.ref
+@@ -1 +1 @@
+-8b27aa27168760b317eb84bbb19b98c9fabc8509
++bec4e31c163dc8e7cff18d5839d5942b27694d72
+-- 
+2.43.0
+
