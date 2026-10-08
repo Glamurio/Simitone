@@ -103,6 +103,12 @@ namespace Simitone.Client.Utils
             list.Add(Toggle(SIMULATION, "Shimmy through narrow gaps",
                 "Sims side-step and pets squeeze between objects instead of failing to route.",
                 () => S.Shimmy, (v) => { S.Shimmy = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Routing fixes",
+                "Each destination gets its own wait time, failures blame the right object, next goals use doors.",
+                () => S.RoutingFixes, (v) => { S.RoutingFixes = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "Action queue fixes",
+                "Queued actions for objects pets can use can be cancelled; fixes a freeze when queueing.",
+                () => S.QueueFixes, (v) => { S.QueueFixes = v; SaveS(); }, departure: true));
 
             //--- camera and controls
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",

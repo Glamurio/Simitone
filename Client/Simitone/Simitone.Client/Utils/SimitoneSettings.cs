@@ -35,6 +35,8 @@ namespace Simitone.Client.Utils
         {
             //simulation changes (VMFeatures)
             { "Shimmy", "true" },
+            { "RoutingFixes", "true" },
+            { "QueueFixes", "true" },
 
             //debugging
             { "Diagnostics", "true" },
@@ -58,6 +60,8 @@ namespace Simitone.Client.Utils
         }
 
         public bool Shimmy { get; set; }
+        public bool RoutingFixes { get; set; }
+        public bool QueueFixes { get; set; }
 
         public bool Diagnostics { get; set; }
         public bool DrawRoutes { get; set; }
@@ -77,6 +81,8 @@ namespace Simitone.Client.Utils
         public void ApplyToEngine()
         {
             VMFeatures.Shimmy = Shimmy;
+            VMFeatures.RoutingFixes = RoutingFixes;
+            VMFeatures.QueueFixes = QueueFixes;
             VMFeatures.Diagnostics = Diagnostics;
             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
         }
