@@ -356,6 +356,11 @@ namespace Simitone.Client.Utils
                 Current.RouteHardFails = vm.Entities.OfType<VMAvatar>().Sum(a => a.Diagnostics?.RouteHardFails ?? 0);
                 if (Hooked) vm.OnDialog -= OnDialog;
             }
+            lock (FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines)
+            {
+                var resets = FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines.Where(x => x.StartsWith("reset on first tick")).ToList();
+                if (resets.Count > 0) Current.Problems.Add($"{resets.Count} object(s) with a stale saved stack were reset on their first tick (no error dialog): " + string.Join("; ", resets.Select(x => x.Substring(21)).Take(40)));
+            }
             if (Current.Exceptions.Count > 0 && Current.Status == "OK") Current.Status = "EXCEPTIONS";
             if (Current.LoadErrors > 0 && Current.Status == "OK") Current.Status = "LOAD ERRORS";
             Current.Seconds = LotTimer.Elapsed.TotalSeconds;
