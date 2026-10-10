@@ -34,8 +34,9 @@ namespace Simitone.Windows
         {
             var result = new StartupArguments();
             if (args == null) return result;
-            foreach (var arg in args)
+            for (int i = 0; i < args.Length; i++)
             {
+                var arg = args[i];
                 if (string.IsNullOrEmpty(arg) || arg[0] != '-') { if (!string.IsNullOrEmpty(arg)) result.Ignored.Add(arg); continue; }
                 var cmd = arg.Substring(1);
                 if (cmd.StartsWith("path")) continue; //PathArgument
@@ -47,6 +48,15 @@ namespace Simitone.Windows
                     var eq = rest.IndexOf('=');
                     var key = eq < 0 ? rest : rest.Substring(0, eq);
                     var val = eq < 0 ? "" : rest.Substring(eq + 1);
+                    if (eq < 0 && (key == "minutes" || key == "seed" || key == "lots"))
+                    {
+                        //cmd.exe (run-smoke.cmd) splits "-smokeminutes=480" and "-smokelots=21,22" at '=' and ',' into separate
+                        //arguments, so the values can follow as the next arguments.
+                        var parts = new List<string>();
+                        while (i + 1 < args.Length && !string.IsNullOrEmpty(args[i + 1]) && args[i + 1][0] != '-' && (key == "lots" || parts.Count == 0))
+                            parts.Add(args[++i]);
+                        val = string.Join(",", parts);
+                    }
                     if (key == "visual") result.SmokeVisual = true;
                     else if (key == "all") result.SmokeAll = true;
                     else if (key == "minutes" && int.TryParse(val, out var m) && m > 0) result.SmokeMinutes = m;

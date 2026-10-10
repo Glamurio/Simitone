@@ -42,6 +42,14 @@ namespace Simitone.Routing.Tests
                 Check(StartupArguments.Parse(new[] { "-dx", "-gl" }).UseDirectX == false, "gl after dx");
             });
 
+            yield return ("switches: -smoke values split by cmd.exe", () =>
+            {
+                var a = StartupArguments.Parse(new[] { "-smoke", "-smokeminutes", "480", "-smokeseed", "7", "-smokelots", "21", "22", "-smokeall" });
+                Check(a.Smoke && a.SmokeMinutes == 480 && a.SmokeSeed == 7 && a.SmokeAll, "values");
+                Check(a.SmokeLots != null && a.SmokeLots.Length == 2 && a.SmokeLots[0] == 21 && a.SmokeLots[1] == 22, "lots");
+                Check(a.Ignored.Count == 0, "nothing ignored");
+            });
+
             yield return ("switches: -smoke options", () =>
             {
                 var a = StartupArguments.Parse(new[] { "-smoke", "-smokeminutes=30", "-smokelots=21,x,22", "-smokeseed=7" });
