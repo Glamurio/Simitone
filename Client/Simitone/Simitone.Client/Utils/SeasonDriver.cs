@@ -2,6 +2,7 @@ using FSO.LotView.Model;
 using FSO.SimAntics;
 using FSO.SimAntics.Seasons;
 using System;
+using System.IO;
 using Microsoft.Xna.Framework;
 
 namespace Simitone.Client.Utils
@@ -26,6 +27,38 @@ namespace Simitone.Client.Utils
         public static float CycleSeconds;
         public static bool CycleDays;
 
+        //what the driver last did, for the season_info diagnostic
+        public static string LastAction = "none yet";
+        public static int LastChanged;
+        public static bool LastRainSeen;
+        public static int UpdateCalls;
+
+        /// <summary>Text for the season_info cheat: season state, plants, foliage and sprite counters.</summary>
+        public static string Report(VM vm, int lengthIndex)
+        {
+            var c = vm.Context.Clock;
+            var len = SeasonModel.LengthFromIndex(lengthIndex);
+            var abs = SeasonModel.AbsoluteDay(c.Year, c.Month, c.DayOfMonth);
+            int deciduous = 0, blossom = 0, evergreen = 0;
+            foreach (var e in vm.Entities)
+            {
+                var label = e?.Object?.OBJ?.ChunkLabel;
+                switch (FSO.LotView.Utils.SeasonalFoliage.Classify(label))
+                {
+                    case FSO.LotView.Utils.FoliageKind.Deciduous: deciduous++; break;
+                    case FSO.LotView.Utils.FoliageKind.Blossom: blossom++; break;
+                    case FSO.LotView.Utils.FoliageKind.Evergreen: evergreen++; break;
+                }
+            }
+            return "Date " + c.Year + "-" + c.Month + "-" + c.DayOfMonth + " " + c.Hours + ":00, season " + SeasonModel.SeasonOf(abs, len)
+                + ", day " + (SeasonModel.DayInSeason(abs, len) + 1) + " of " + len + "\n"
+                + "Driver updates " + UpdateCalls + ", last plant action: " + LastAction + " (" + LastChanged + " plants), raining " + LastRainSeen + "\n"
+                + PlantSeasons.Describe(vm) + "\n"
+                + "Foliage objects: " + deciduous + " deciduous, " + blossom + " blossom, " + evergreen + " evergreen; world season " + (vm.Context.World?.State?.FoliageSeason) + "\n"
+                + "Foliage sprites: requested " + FSO.LotView.Utils.SeasonalSprites.Requests + ", recoloured " + FSO.LotView.Utils.SeasonalSprites.Built
+                + ", no frame " + FSO.LotView.Utils.SeasonalSprites.NoFrame + ", no pixels " + FSO.LotView.Utils.SeasonalSprites.NoPixels;
+        }
+
         private long LastSlot = long.MinValue;
         private bool Applied;
         private long LastPlantKey = long.MinValue;
@@ -45,6 +78,7 @@ namespace Simitone.Client.Utils
             LastSlot = long.MinValue;
             Applied = false;
             LastPlantKey = long.MinValue;
+            CalendarSynced = false;
             CycleWeather = null;
             ManualOverride = false; //a cheat weather belongs to the lot it was typed on
         }
@@ -54,9 +88,10 @@ namespace Simitone.Client.Utils
             return SeasonModel.SeasonOf(clock.Year, clock.Month, clock.DayOfMonth, SeasonModel.LengthFromIndex(lengthIndex));
         }
 
-        public void Update(VM vm, WeatherController weather, bool enabled, int lengthIndex)
+        public void Update(VM vm, WeatherController weather, bool enabled, int lengthIndex, string calendarPath = null)
         {
             if (weather == null) return;
+            UpdateCalls++;
             if (!enabled)
             {
                 if (Applied)
@@ -72,6 +107,7 @@ namespace Simitone.Client.Utils
 
             var clock = vm.Context.Clock;
             var length = SeasonModel.LengthFromIndex(lengthIndex);
+            if (calendarPath != null) SyncCalendar(clock, calendarPath);
             var abs = SeasonModel.AbsoluteDay(clock.Year, clock.Month, clock.DayOfMonth);
 
             if (CycleSeconds > 0 && (DateTime.UtcNow - LastCycle).TotalSeconds >= CycleSeconds)
@@ -110,6 +146,40 @@ namespace Simitone.Client.Utils
             Applied = true;
         }
 
+        private bool CalendarSynced;
+        private long CalendarDay = long.MinValue;
+
+        /// <summary>
+        /// One date for the whole neighbourhood: the first update on a lot takes the date from the neighbourhood's calendar file
+        /// (the first lot ever visited writes it), after that the file follows this lot's clock whenever the day changes.
+        /// The time of day stays per lot, as in the original game.
+        /// </summary>
+        private void SyncCalendar(VMClock clock, string path)
+        {
+            try
+            {
+                if (!CalendarSynced)
+                {
+                    CalendarSynced = true;
+                    if (File.Exists(path) && SeasonCalendarFile.TryParse(File.ReadAllText(path), out int y, out int m, out int d))
+                    {
+                        clock.Year = y; clock.Month = m; clock.DayOfMonth = d;
+                    }
+                    CalendarDay = long.MinValue; //written below if missing or changed
+                }
+                var day = SeasonModel.AbsoluteDay(clock.Year, clock.Month, clock.DayOfMonth);
+                if (day != CalendarDay)
+                {
+                    CalendarDay = day;
+                    File.WriteAllText(path, SeasonCalendarFile.Format(clock.Year, clock.Month, clock.DayOfMonth));
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("Neighbourhood calendar: " + e.Message);
+            }
+        }
+
         /// <summary>
         /// Rain waters the outdoor plants, winter wilts and then kills them, early spring brings them back (PlantSeasons).
         /// Runs once per game hour, and again when the rain starts or stops.
@@ -122,7 +192,9 @@ namespace Simitone.Client.Utils
             LastPlantKey = key;
             LastRaining = raining;
             var action = PlantSeasons.Decide(season, SeasonModel.DayInSeason(abs, length), length, raining);
-            PlantSeasons.Apply(vm, action);
+            LastChanged = PlantSeasons.Apply(vm, action);
+            LastAction = action + " at " + abs + " h" + hour;
+            LastRainSeen = raining;
         }
     }
 }

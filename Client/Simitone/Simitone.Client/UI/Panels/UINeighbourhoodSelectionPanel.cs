@@ -379,6 +379,24 @@ namespace Simitone.Client.UI.Panels
                 });
         }
 
+        //the map picture is 800x600 in panel space; a lot near its edge has a ground diamond that reaches past it onto the
+        //screen background (the original game did the same, but the surround is empty here), so house sprites are cut to the map.
+        private const int MapWidth = 800, MapHeight = 600;
+
+        private void DrawClipped(UISpriteBatch batch, Texture2D tex, Vector2 offset, Color color)
+        {
+            var s = 1f / HouseScale;
+            float x0 = Position.X + offset.X, y0 = Position.Y + offset.Y, w = tex.Width * s, h = tex.Height * s;
+            float cx0 = Math.Max(x0, 0), cy0 = Math.Max(y0, 0), cx1 = Math.Min(x0 + w, MapWidth), cy1 = Math.Min(y0 + h, MapHeight);
+            if (cx1 <= cx0 || cy1 <= cy0) return;
+            var src = new Rectangle((int)Math.Round((cx0 - x0) / s), (int)Math.Round((cy0 - y0) / s),
+                Math.Max(1, (int)Math.Round((cx1 - cx0) / s)), Math.Max(1, (int)Math.Round((cy1 - cy0) / s)));
+            src.Width = Math.Min(src.Width, tex.Width - src.X);
+            src.Height = Math.Min(src.Height, tex.Height - src.Y);
+            if (src.Width <= 0 || src.Height <= 0) return;
+            DrawLocalTexture(batch, tex, src, new Vector2(cx0 - Position.X, cy0 - Position.Y), new Vector2(s, s), color);
+        }
+
         public override void Draw(UISpriteBatch batch)
         {
             var yOff = new Vector2(Offsets.XOff, -Offsets.BaseYOff) / HouseScale;
@@ -386,9 +404,9 @@ namespace Simitone.Client.UI.Panels
             yOff2.Y -= Offsets.AddYOff / (HouseScale);
             if (AlphaTime > 0)
             {
-                DrawLocalTexture(batch, HouseOpenTex, null, new Vector2(-Offsets.Width, -Offsets.Height)/ HouseScale + yOff2, new Vector2(1f / HouseScale, 1f / HouseScale));
+                DrawClipped(batch, HouseOpenTex, new Vector2(-Offsets.Width, -Offsets.Height) / HouseScale + yOff2, Color.White);
             }
-            DrawLocalTexture(batch, HouseTex, null, new Vector2(-Offsets.Width, -Offsets.Height) / HouseScale + yOff, new Vector2(1f / HouseScale, 1f / HouseScale), Color.White * (1 - AlphaTime));
+            DrawClipped(batch, HouseTex, new Vector2(-Offsets.Width, -Offsets.Height) / HouseScale + yOff, Color.White * (1 - AlphaTime));
         }
 
         public override void Removed()

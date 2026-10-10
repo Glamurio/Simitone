@@ -64,6 +64,19 @@ namespace Simitone.Routing.Tests
                 }
             });
 
+            yield return ("calendar file: a date round-trips through its text", () =>
+            {
+                Check(SeasonCalendarFile.Format(1997, 12, 3) == "1997 12 3", "format");
+                Check(SeasonCalendarFile.TryParse("1997 12 3", out int y, out int m, out int d) && y == 1997 && m == 12 && d == 3, "parse");
+                Check(SeasonCalendarFile.TryParse(" 2001\r\n7 30 \r\n", out y, out m, out d) && y == 2001 && m == 7 && d == 30, "whitespace is ignored");
+            });
+
+            yield return ("calendar file: nonsense is rejected so a damaged file cannot set the clock", () =>
+            {
+                foreach (var bad in new[] { null, "", "   ", "1997 13 1", "1997 0 1", "1997 5 31", "1997 5 0", "1997 5", "a b c", "1997 5 1 2", "-4 5 1" })
+                    Check(!SeasonCalendarFile.TryParse(bad, out _, out _, out _), "accepted '" + bad + "'");
+            });
+
             yield return ("plants: only the outdoor flowers are seasonal", () =>
             {
                 Check(PlantSeasons.IsOutdoorPlant("Flowers - Outdoor - Tulips"), "tulips");

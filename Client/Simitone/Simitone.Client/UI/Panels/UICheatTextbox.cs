@@ -190,6 +190,9 @@ namespace Simitone.Client.UI.Panels
                 case "diagnostics":
                     settings.Diagnostics = value ?? !settings.Diagnostics;
                     break;
+                case "season_info":
+                    ShowSeasonInfo();
+                    return true;
                 case "write_routes":
                     var path = Simitone.Client.Utils.DiagnosticsWriter.Write(ts1VM);
                     ShowDiagnosticsWritten(path);
@@ -200,6 +203,18 @@ namespace Simitone.Client.UI.Panels
             settings.Save();
             settings.ApplyToEngine();
             return true;
+        }
+
+        private void ShowSeasonInfo()
+        {
+            Simitone.Client.UI.Panels.UIMobileAlert alert = null;
+            alert = new Simitone.Client.UI.Panels.UIMobileAlert(new UIAlertOptions()
+            {
+                Title = "Seasons",
+                Message = (ts1VM == null) ? "No lot is loaded." : Simitone.Client.Utils.SeasonDriver.Report(ts1VM, Simitone.Client.Utils.SimitoneSettings.Default.SeasonLength),
+                Buttons = UIAlertButton.Ok((b) => alert.Close())
+            });
+            UIScreen.GlobalShowDialog(alert, true);
         }
 
         public static void ShowDiagnosticsWritten(string path)

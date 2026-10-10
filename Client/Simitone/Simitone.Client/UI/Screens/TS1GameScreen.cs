@@ -64,6 +64,8 @@ namespace Simitone.Client.UI.Screens
         private float LastSoundIntensity = -1;
         private WeatherType LastWeatherType = WeatherType.Rain;
         private bool LastThunder = false;
+        /// <summary>True when the loaded lot belongs to the base neighbourhood, the only one with seasons.</summary>
+        private bool SeasonsHere;
         private int TerrainGround = -1; //ground shown on this lot's terrain: 0 as the lot is, 1 autumn, 2 snow (-1 not yet applied)
         private SeasonDriver SeasonControl = new SeasonDriver();
         private float ThunderTimer = 0f;
@@ -485,7 +487,11 @@ namespace Simitone.Client.UI.Screens
 
             var weather = vm.Context.Blueprint.Weather;
             var settings = SimitoneSettings.Default;
-            SeasonControl.Update(vm, weather, settings.Seasons, settings.SeasonLength);
+            //seasons run in the base neighbourhood only, on one neighbourhood-wide calendar; Makin' Magic and the others keep their own
+            //weather and clocks. SeasonControl.Current is only meaningful while they run.
+            var seasonsHere = settings.Seasons && SeasonsHere;
+            var calendarPath = seasonsHere ? Path.Combine(Content.Get().Neighborhood.UserPath, "Simitone.calendar") : null;
+            SeasonControl.Update(vm, weather, seasonsHere, settings.SeasonLength, calendarPath);
             var currentType = weather.WeatherType;
             var currentThunder = weather.IsThunder;
             var currentIntensity = weather.WeatherIntensity;
@@ -514,7 +520,7 @@ namespace Simitone.Client.UI.Screens
             {
                 int ground = 0;
                 if ((currentType == WeatherType.Snow && currentIntensity > 0.1f) || weather.HasSnowCover) ground = 2;
-                else if (settings.Seasons && SeasonControl.Current == FSO.SimAntics.Seasons.Season.Autumn) ground = 1;
+                else if (seasonsHere && SeasonControl.Current == FSO.SimAntics.Seasons.Season.Autumn) ground = 1;
                 if (ground != TerrainGround)
                 {
                     terrain.SetSeasonGround(ground);
@@ -630,6 +636,7 @@ namespace Simitone.Client.UI.Screens
             LastWeatherType = WeatherType.Rain;
             LastThunder = false;
             TerrainGround = -1;
+            SeasonsHere = false; //set again by the lot load that follows
             SeasonControl.Reset();
             ThunderTimer = 0f;
             PendingWeatherData = null;
@@ -733,6 +740,8 @@ namespace Simitone.Client.UI.Screens
         {
             if (lotName == "" || lotName[0] == '!') return;
             InitializeLot();
+            var houseMatch = System.Text.RegularExpressions.Regex.Match(lotName, @"House(\d+)\.iff", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            SeasonsHere = !external && !Downtown && houseMatch.Success && GetNeighborhoodModeFromHouse(short.Parse(houseMatch.Groups[1].Value)) == 4;
             
             if (!external)
             {
