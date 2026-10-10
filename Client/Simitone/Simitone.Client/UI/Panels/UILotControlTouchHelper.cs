@@ -54,6 +54,7 @@ namespace Simitone.Client.UI.Panels
         private int LastMouseWheel;
         private bool ScrollWheelInvalid;
         private int ZoomFreezeTime;
+        private int WheelAccumulated;
         public bool _3D;
         public override void Update(UpdateState state)
         {
@@ -75,7 +76,13 @@ namespace Simitone.Client.UI.Panels
                 var routed = Simitone.Client.UI.Utils.UIWheelRouting.Route(state.MouseState.Position, wheelDiff);
                 if (wheelDiff != 0)
                 {
-                    if (!routed)
+                    if (!routed && !_3d && Simitone.Client.Utils.SimitoneSettings.Default.SteppedZoom)
+                    {
+                        //2D: one view distance per notch, like the original game.
+                        var dir = Simitone.Client.UI.Utils.ZoomSteps.Accumulate(ref WheelAccumulated, wheelDiff);
+                        if (dir != 0) Master.TargetZoom = Simitone.Client.UI.Utils.ZoomSteps.Step(Master.TargetZoom, dir);
+                    }
+                    else if (!routed)
                     {
                         Master.TargetZoom = Master.TargetZoom + wheelDiff / 1600f;
                         Master.TargetZoom = Math.Max(0.25f, Math.Min(Master.TargetZoom, 2));
@@ -271,7 +278,12 @@ namespace Simitone.Client.UI.Panels
             if (Mode == -1)
             {
                 ScrollVelocity *= 0.95f * Math.Min(ScrollVelocity.Length(), 1);
-                if (Master.TargetZoom < 1.25f && ZoomFreezeTime == 0 && !_3d) {
+                if (!_3d && Simitone.Client.Utils.SimitoneSettings.Default.SteppedZoom)
+                {
+                    //stepped zoom: always sit exactly on a view distance (no drifting towards one).
+                    Master.TargetZoom = Simitone.Client.UI.Utils.ZoomSteps.Nearest(Master.TargetZoom);
+                }
+                else if (Master.TargetZoom < 1.25f && ZoomFreezeTime == 0 && !_3d) {
                     float snapZoom = 1f;
                     float dist = 200f;
                     foreach (var snappable in SnapZooms)
