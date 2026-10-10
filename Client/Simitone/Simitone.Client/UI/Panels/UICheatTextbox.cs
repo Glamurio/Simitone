@@ -289,6 +289,19 @@ namespace Simitone.Client.UI.Panels
         private void HandleSeasonCommand(string command)
         {
             var parts = command.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2 && parts[1] == "cycle")
+            {
+                //"season cycle [seconds] [days]" / "season cycle off": steps through the seasons (or days) on a timer, forcing weather
+                bool off = parts.Length >= 3 && parts[2] == "off";
+                float seconds = 5;
+                if (parts.Length >= 3 && !off && !float.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out seconds)) seconds = 5;
+                Simitone.Client.Utils.SeasonDriver.CycleSeconds = off ? 0 : Math.Max(0.5f, seconds);
+                Simitone.Client.Utils.SeasonDriver.CycleDays = Array.IndexOf(parts, "days") >= 2;
+                Simitone.Client.Utils.SeasonDriver.ManualOverride = false;
+                Simitone.Client.Utils.SeasonDriver.ForceReapply = true;
+                FSO.HIT.HITVM.Get().PlaySoundEvent(UISounds.Click);
+                return;
+            }
             FSO.SimAntics.Seasons.Season season;
             if (parts.Length < 2 || ts1VM?.Context?.Clock == null || !Enum.TryParse(parts[1], true, out season) || !Enum.IsDefined(typeof(FSO.SimAntics.Seasons.Season), season))
             {
