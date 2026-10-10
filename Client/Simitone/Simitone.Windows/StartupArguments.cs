@@ -23,6 +23,8 @@ namespace Simitone.Windows
         public int? SmokeMinutes;
         public int? SmokeSeed;
         public int[] SmokeLots;
+        /// <summary>-smokevisual: render and run at normal speed 10 instead of the default headless fast mode.</summary>
+        public bool SmokeVisual;
         /// <summary>Arguments that were not understood, for the start-up log.</summary>
         public List<string> Ignored = new List<string>();
 
@@ -43,7 +45,8 @@ namespace Simitone.Windows
                     var eq = rest.IndexOf('=');
                     var key = eq < 0 ? rest : rest.Substring(0, eq);
                     var val = eq < 0 ? "" : rest.Substring(eq + 1);
-                    if (key == "minutes" && int.TryParse(val, out var m) && m > 0) result.SmokeMinutes = m;
+                    if (key == "visual") result.SmokeVisual = true;
+                    else if (key == "minutes" && int.TryParse(val, out var m) && m > 0) result.SmokeMinutes = m;
                     else if (key == "seed" && int.TryParse(val, out var sd)) result.SmokeSeed = sd;
                     else if (key == "lots")
                     {

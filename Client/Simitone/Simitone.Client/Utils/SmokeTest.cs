@@ -40,6 +40,16 @@ namespace Simitone.Client.Utils
         private const int PROGRESS_SECONDS = 30;
         public static int[] OnlyLots = null;
         public static int Seed = 1234;
+        /// <summary>
+        /// Default: while a lot is being simulated nothing is drawn and the VM is ticked as fast as the CPU allows (no frame limit, no
+        /// real-time pacing). -smokevisual turns this off to watch the game play at normal speed 10.
+        /// </summary>
+        public static bool Headless = true;
+        private const int TICK_BUDGET_MS = 40;
+        private const int MAX_LOT_SECONDS_HEADLESS = 240;
+
+        /// <summary>True while the game should skip rendering and frame limiting (checked by SimitoneGame.Draw and the game screen).</summary>
+        public bool SkipDraw { get { return Headless && State == Phase.Running; } }
 
         private const int LOAD_TIMEOUT_SECONDS = 180;
         private const int STALL_SECONDS = 45;
@@ -61,7 +71,7 @@ namespace Simitone.Client.Utils
         private long LastTicks;
         private Stopwatch StallTimer;
         private readonly Stopwatch ProgressTimer = Stopwatch.StartNew();
-        private int FramesUntilAction;
+        private long NextActionTick;
         private int FramesUntilDialog = -1;
         private VMDialogInfo PendingDialog;
         private bool Hooked;
@@ -86,7 +96,7 @@ namespace Simitone.Client.Utils
             var dir = Path.Combine(FSOEnvironment.UserDir, "reports");
             Directory.CreateDirectory(dir);
             ReportPath = Path.Combine(dir, $"smoke-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
-            File.WriteAllText(ReportPath, $"Simitone smoke test, started {DateTime.Now:s}\r\n{GameSourceInfo.Describe()}\r\nMinutes per lot: {Minutes}, seed {Seed}\r\n\r\n");
+            File.WriteAllText(ReportPath, $"Simitone smoke test, started {DateTime.Now:s}\r\n{GameSourceInfo.Describe()}\r\nMinutes per lot: {Minutes}, seed {Seed}, {(Headless ? "headless" : "visual")}\r\n\r\n");
             VMDiagnostics.OnActionEnded += ActionEnded;
             Simitone.Client.UI.Panels.UILotControl.ShowSimanticsExceptions = false;
         }
@@ -189,7 +199,7 @@ namespace Simitone.Client.Utils
             screen.ChangeSpeedTo(3);
             StartTicks = LastTicks = vm.Context.Clock.Ticks;
             StallTimer = Stopwatch.StartNew();
-            FramesUntilAction = 60;
+            NextActionTick = StartTicks + Math.Max(1, vm.Context.Clock.TicksPerMinute) * 2;
             State = Phase.Running;
         }
 
@@ -224,8 +234,22 @@ namespace Simitone.Client.Utils
                 vm.SendCommand(new VMNetDialogResponseCmd { ResponseCode = code, ResponseText = type == VMDialogType.NumericEntry ? "1" : "Smoke" });
             }
 
-            var ticks = vm.Context.Clock.Ticks;
             var perMinute = Math.Max(1, vm.Context.Clock.TicksPerMinute);
+            var limit = vm.Entities.OfType<VMAvatar>().Any() ? Minutes : Math.Min(Minutes, EMPTY_LOT_MINUTES);
+            if (Headless)
+            {
+                //The game screen's own vm.Update still runs once per frame; this adds as many ticks as fit in the budget.
+                //Stops early for a dialog (needs a frame to be answered), a pause, or the end of the lot.
+                var budget = Stopwatch.StartNew();
+                while (budget.ElapsedMilliseconds < TICK_BUDGET_MS && PendingDialog == null && vm.SpeedMultiplier > 0
+                    && (vm.Context.Clock.Ticks - StartTicks) / perMinute < limit)
+                {
+                    vm.Tick();
+                    if (vm.Context.Clock.Ticks >= NextActionTick) break;
+                }
+            }
+
+            var ticks = vm.Context.Clock.Ticks;
             Current.GameMinutes = (ticks - StartTicks) / perMinute;
 
             if (ticks != LastTicks) { LastTicks = ticks; StallTimer.Restart(); }
@@ -241,9 +265,9 @@ namespace Simitone.Client.Utils
                 }
             }
 
-            if (--FramesUntilAction <= 0)
+            if (ticks >= NextActionTick)
             {
-                FramesUntilAction = 90 + Rand.Next(120);
+                NextActionTick = ticks + perMinute * (5 + Rand.Next(10)); //every 5-15 game minutes, for Sims with nothing queued
                 if (vm.SpeedMultiplier == 0) screen.ChangeSpeedTo(3);
                 RandomInteraction(vm);
             }
@@ -256,11 +280,11 @@ namespace Simitone.Client.Utils
                 try { GameFacade.Game.Window.Title = "Simitone smoke test - " + line; } catch (Exception) { }
             }
 
-            var limit = vm.Entities.OfType<VMAvatar>().Any() ? Minutes : Math.Min(Minutes, EMPTY_LOT_MINUTES);
+            var maxSeconds = Headless ? MAX_LOT_SECONDS_HEADLESS : MAX_LOT_SECONDS;
             if (Current.GameMinutes >= limit) { EndLot(screen); }
-            else if (LotTimer.Elapsed.TotalSeconds > MAX_LOT_SECONDS)
+            else if (LotTimer.Elapsed.TotalSeconds > maxSeconds)
             {
-                Current.Status = "SLOW: stopped after " + MAX_LOT_SECONDS + "s";
+                Current.Status = "SLOW: stopped after " + maxSeconds + "s";
                 EndLot(screen);
             }
         }

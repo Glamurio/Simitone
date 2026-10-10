@@ -360,7 +360,7 @@ namespace Simitone.Client.UI.Screens
 
         public override void Update(FSO.Common.Rendering.Framework.Model.UpdateState state)
         {
-            GameFacade.Game.IsFixedTimeStep = (vm == null || vm.Ready);
+            GameFacade.Game.IsFixedTimeStep = (vm == null || vm.Ready) && Simitone.Client.Utils.SmokeTest.Active?.SkipDraw != true;
             
             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
             GameFacade.Game.IsMouseVisible = Visible;

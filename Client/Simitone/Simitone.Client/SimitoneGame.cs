@@ -324,6 +324,13 @@ namespace Simitone.Client
         /// <summary>False while the window is in the background. Edge scrolling ignores the mouse then: it reports stale or off-window positions.</summary>
         public static bool WindowActive = true;
         private int TitleTick;
+        protected override void Draw(GameTime gameTime)
+        {
+            //-smoke runs without rendering while a lot is simulated
+            if (Simitone.Client.Utils.SmokeTest.Active?.SkipDraw == true) return;
+            base.Draw(gameTime);
+        }
+
         protected override void Update(GameTime gameTime)
         {
             if (!HasUpdated)

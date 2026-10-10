@@ -51,6 +51,8 @@ namespace Simitone.Routing.Tests
                 var bad = StartupArguments.Parse(new[] { "-smokeminutes=abc", "-smokelots=zz", "-smokefoo" });
                 Check(bad.Smoke && bad.SmokeMinutes == null && bad.SmokeLots == null && bad.Ignored.Count == 3, "malformed values are ignored, still a smoke run");
                 Check(!StartupArguments.Parse(new[] { "-3d" }).Smoke, "off by default");
+                var visual = StartupArguments.Parse(new[] { "-smokevisual" });
+                Check(!a.SmokeVisual && visual.Smoke && visual.SmokeVisual && visual.Ignored.Count == 0, "headless unless -smokevisual");
             });
 
             yield return ("switches: -path is left for PathArgument", () =>
