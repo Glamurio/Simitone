@@ -357,11 +357,12 @@ namespace Simitone.Client.UI.Screens
             var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
             if (!typing)
             {
-                if (state.NewKeys.Contains(Keys.D1)) ChangeSpeedTo(1);
-                if (state.NewKeys.Contains(Keys.D2)) ChangeSpeedTo(2);
-                if (state.NewKeys.Contains(Keys.D3)) ChangeSpeedTo(3);
-                if (state.NewKeys.Contains(Keys.P)) ChangeSpeedTo(0);
-                if (state.NewKeys.Contains(Keys.D0))
+                foreach (var key in state.NewKeys)
+                {
+                    var speed = Simitone.Client.UI.Utils.GameSpeedKeys.SpeedFor(key);
+                    if (speed >= 0) ChangeSpeedTo(speed);
+                }
+                if (state.NewKeys.Contains(Keys.D0) || state.NewKeys.Contains(Keys.NumPad0))
                 {
                     //frame advance
                     ChangeSpeedTo(1);
