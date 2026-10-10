@@ -25,6 +25,30 @@ namespace Simitone.Client.Utils
         /// <summary>The folder Simitone actually reads and writes neighbourhoods in (it works on a copy of the original saves).</summary>
         public static string SimitoneUserData => Path.Combine(FSO.Common.FSOEnvironment.UserDir ?? "", "UserData");
 
+        /// <summary>One line for the window title: which install, how it was chosen, and where the saves were copied from.</summary>
+        public static string TitleSuffix()
+        {
+            if (GamePath == null) return "";
+            return " - " + InstallKind + " (" + Origin + ") - saves from: " + SaveCopySource();
+        }
+
+        /// <summary>Writes simitone-startup.txt next to simitone.ini so the choice can be checked after the game closed.</summary>
+        public static void WriteStartupLog()
+        {
+            try
+            {
+                var file = Path.Combine(FSO.Common.FSOEnvironment.UserDir ?? "", "simitone-startup.txt");
+                File.WriteAllText(file,
+                    "Started: " + DateTime.Now.ToString("s") + "\r\n" +
+                    "Game folder: " + GamePath + "\r\n" +
+                    "Type: " + InstallKind + "\r\n" +
+                    "Chosen by: " + Origin + "\r\n" +
+                    "Simitone saves: " + SimitoneUserData + "\r\n" +
+                    "Saves copied from: " + SaveCopySource() + "\r\n");
+            }
+            catch (Exception) { }
+        }
+
         /// <summary>Where Simitone's copy of the neighbourhood was made from, or a note if it can't be told.</summary>
         public static string SaveCopySource()
         {

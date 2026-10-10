@@ -19,6 +19,12 @@ namespace Simitone.Routing.Tests
                 Check(!FSO.SimAntics.VMFeatures.AutonomyLockout, "AutonomyLockout must default to off");
             });
 
+            yield return ("off-lot positions (hiding pets) are detected", () =>
+            {
+                Check(FSO.SimAntics.VMEntity.IsOffLotPosition(FSO.LotView.Model.LotTilePos.OUT_OF_WORLD), "out of world is off lot");
+                Check(!FSO.SimAntics.VMEntity.IsOffLotPosition(new FSO.LotView.Model.LotTilePos(40, 40, 1)), "in-world tile is on lot");
+            });
+
             yield return ("lockout filter off: nothing is skipped", () =>
             {
                 Check(!VMFindBestAction.SkipForLockout(false, false, 500), "locked object kept when filter off");

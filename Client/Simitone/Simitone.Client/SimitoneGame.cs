@@ -320,17 +320,21 @@ namespace Simitone.Client
         /// checking for collisions, gathering input, and playing audio.
         /// </summary>
         /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        private int TitleTick;
         protected override void Update(GameTime gameTime)
         {
             if (!HasUpdated)
             {
                 this.IsMouseVisible = true;
                 if (!FSOEnvironment.SoftwareKeyboard) AddTextInput();
-                this.Window.Title = "Simitone";
+                this.Window.Title = "Simitone" + Simitone.Client.Utils.GameSourceInfo.TitleSuffix();
+                Simitone.Client.Utils.GameSourceInfo.WriteStartupLog();
                 HasUpdated = true;
                 GameFacade.Screens = uiLayer;
                 GameController.EnterLoading();
             }
+            if (++TitleTick % 120 == 0) //the save copy is only made once a neighbourhood is opened
+                this.Window.Title = "Simitone" + Simitone.Client.Utils.GameSourceInfo.TitleSuffix();
             GameThread.UpdateExecuting = true;
 
             UpdateDisplayMode();

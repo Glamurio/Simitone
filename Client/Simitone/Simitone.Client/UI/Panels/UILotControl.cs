@@ -760,7 +760,7 @@ namespace Simitone.Client.UI.Panels
                 ActiveEntity = vm.Entities.FirstOrDefault(x => x is VMAvatar && x.PersistID == SelectedSimID); //try and hook onto a sim if we have none selected.
                 //if (ActiveEntity == null) ActiveEntity = vm.Entities.FirstOrDefault(x => x is VMAvatar);
 
-                if (!FoundMe && ActiveEntity != null)
+                if (!FoundMe && ActiveEntity != null && !ActiveEntity.IsOffLot)
                 {
                     vm.Context.World.State.CenterTile = new Vector2(ActiveEntity.VisualPosition.X, ActiveEntity.VisualPosition.Y);
                     vm.Context.World.State.ScrollAnchor = null;

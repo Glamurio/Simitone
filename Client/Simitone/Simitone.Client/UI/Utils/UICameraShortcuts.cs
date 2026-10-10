@@ -52,7 +52,8 @@ namespace Simitone.Client.UI.Utils
             var ws = world.State;
             var keys = state.NewKeys;
             var sim = lotControl.ActiveEntity as VMAvatar;
-            var simUI = sim?.WorldUI as AvatarComponent;
+            //A hiding pet is in the void (-2048, -2048): never centre or follow the camera onto it.
+            var simUI = (sim == null || sim.IsOffLot) ? null : sim.WorldUI as AvatarComponent;
 
             //arrow key / WASD panning. The direction is normalised on screen, so diagonals are not faster than straight lines.
             var kb = state.KeyboardState;
@@ -70,7 +71,7 @@ namespace Simitone.Client.UI.Utils
             }
 
             //any scroll (edge, drag, keys) clears the anchor: that ends following.
-            if (Following && ws.ScrollAnchor == null) Following = false;
+            if (Following && ws.ScrollAnchor == null && simUI != null) Following = false;
             //keep following across Sim switches.
             if (Following && simUI != null && ws.ScrollAnchor != simUI) ws.ScrollAnchor = simUI;
 
@@ -79,6 +80,7 @@ namespace Simitone.Client.UI.Utils
                 Previous = Capture(ws, lotControl);
                 world.CenterTo(simUI);
             }
+            if (Following && simUI == null && sim != null && ws.ScrollAnchor != null) ws.ScrollAnchor = null; //selected Sim went off lot: stay put
             if (keys.Contains(Keys.F) && simUI != null)
             {
                 Following = !Following;
