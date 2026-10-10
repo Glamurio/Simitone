@@ -629,7 +629,8 @@ namespace Simitone.Client.UI.Screens
             LastSoundIntensity = -1;
             LastWeatherType = WeatherType.Rain;
             LastThunder = false;
-            TerrainSnowApplied = false;
+            TerrainGround = -1;
+            SeasonControl.Reset();
             ThunderTimer = 0f;
             PendingWeatherData = null;
 
