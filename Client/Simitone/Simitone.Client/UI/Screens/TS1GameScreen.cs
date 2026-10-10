@@ -476,10 +476,17 @@ namespace Simitone.Client.UI.Screens
                 undo.Clear();
                 return;
             }
-            if (typing || !state.CtrlDown || LotControl.ObjectHolder.Holding != null || LotControl.CustomControl != null) return;
-            bool done = false;
-            if (state.NewKeys.Contains(Keys.Z) && !state.ShiftDown) done = undo.Undo(vm);
-            else if (state.NewKeys.Contains(Keys.Y) || (state.NewKeys.Contains(Keys.Z) && state.ShiftDown)) done = undo.Redo(vm);
+            if (typing || !state.CtrlDown || LotControl.ObjectHolder.Holding != null) return; // build tools (walls, floors...) are custom controls: undo has to work while one is selected
+            if (state.NewKeys.Contains(Keys.Z) && !state.ShiftDown) RunUndo(false);
+            else if (state.NewKeys.Contains(Keys.Y) || (state.NewKeys.Contains(Keys.Z) && state.ShiftDown)) RunUndo(true);
+        }
+
+        /// <summary>Undo or redo the last buy/build change (keyboard and the Undo/Redo buttons).</summary>
+        public void RunUndo(bool redo)
+        {
+            if (LotControl == null || LotControl.LiveMode || LotControl.ObjectHolder.Holding != null) return; // build tools (walls, floors...) are custom controls: undo has to work while one is selected
+            var undo = LotControl.BuildUndo;
+            var done = redo ? undo.Redo(vm) : undo.Undo(vm);
             if (done) FSO.HIT.HITVM.Get()?.PlaySoundEvent(FSO.Client.UI.Model.UISounds.ObjectMovePlace);
         }
 

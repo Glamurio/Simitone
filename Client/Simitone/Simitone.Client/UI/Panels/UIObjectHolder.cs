@@ -272,6 +272,7 @@ namespace Simitone.Client.UI.Panels
                         var GUID = (Holding.Group.MultiTile) ? Holding.Group.BaseObject.MasterDefinition.GUID : Holding.Group.BaseObject.Object.OBJ.GUID;
                         if (UseNet || ParentControl.ActiveEntity != null)
                         {
+                            var existing = Simitone.Client.Utils.BuildUndoStack.BuyEntry.IDsWithGUID(vm, GUID); //before the command can run
                             vm.SendCommand(new VMNetBuyObjectCmd
                             {
                                 GUID = GUID,
@@ -282,7 +283,8 @@ namespace Simitone.Client.UI.Panels
                             });
                             if (Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo)
                                 ParentControl.BuildUndo.Push(new Simitone.Client.Utils.BuildUndoStack.BuyEntry()
-                                    { GUID = GUID, Position = new LotTilePos(pos.x, pos.y, pos.Level), Dir = Holding.Dir });
+                                    { GUID = GUID, Position = new LotTilePos(pos.x, pos.y, pos.Level), Dir = Holding.Dir,
+                                      Before = existing });
                         } else
                         {
                             Holding.MoveTarget = Holding.Group.BaseObject.ObjectID;
