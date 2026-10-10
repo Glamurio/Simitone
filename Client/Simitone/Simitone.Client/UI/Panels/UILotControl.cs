@@ -187,6 +187,8 @@ namespace Simitone.Client.UI.Panels
         }
 
         public static bool ShowSimanticsExceptions = true;
+        /// <summary>No object picture on dialogs. Set by the headless smoke test, which draws nothing.</summary>
+        public static bool SkipDialogIcons;
         void vm_OnDialog(FSO.SimAntics.Model.VMDialogInfo info)
         {
             if (info != null && ((info.DialogID == LastDialogID && info.DialogID != 0 && info.Block))) return;
@@ -313,8 +315,16 @@ namespace Simitone.Client.UI.Panels
                 {
                     objComps[i] = (ObjectComponent)objects[i].WorldUI;
                 }
-                var thumb = World.GetObjectThumb(objComps, entity.MultitileGroup.GetBasePositions(), GameFacade.GraphicsDevice);
-                alert.SetIcon(thumb, 256, 256);
+                if (SkipDialogIcons) return; //the headless smoke test does no GPU work
+                try
+                {
+                    var thumb = World.GetObjectThumb(objComps, entity.MultitileGroup.GetBasePositions(), GameFacade.GraphicsDevice);
+                    alert.SetIcon(thumb, 256, 256);
+                }
+                catch (Exception)
+                {
+                    //only the picture next to the message is lost
+                }
             }
         }
 

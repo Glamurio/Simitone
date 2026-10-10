@@ -105,6 +105,7 @@ namespace Simitone.Client.Utils
             File.WriteAllText(ReportPath, $"Simitone smoke test, started {DateTime.Now:s}\r\n{GameSourceInfo.Describe()}\r\nMinutes per lot: {Minutes}, seed {Seed}, {(Headless ? "headless" : "visual")}\r\n\r\n");
             VMDiagnostics.OnActionEnded += ActionEnded;
             Simitone.Client.UI.Panels.UILotControl.ShowSimanticsExceptions = false;
+            Simitone.Client.UI.Panels.UILotControl.SkipDialogIcons = Headless;
         }
 
         public string Report { get { return ReportPath; } }
@@ -140,7 +141,13 @@ namespace Simitone.Client.Utils
             catch (Exception e)
             {
                 Log("HARNESS ERROR in phase " + State + ": " + e);
-                if (Current != null) { Current.Status = "HARNESS ERROR"; Current.Problems.Add(e.ToString()); EndLot(screen); }
+                if (Current != null)
+                {
+                    //an exception out of the Running phase comes from vm.Tick: in the real game that is an unhandled crash
+                    Current.Status = State == Phase.Running ? "FAIL: exception escaped the simulation" : "HARNESS ERROR";
+                    Current.Problems.Add(e.ToString());
+                    EndLot(screen);
+                }
                 else State = Phase.NextLot;
             }
         }
@@ -185,6 +192,7 @@ namespace Simitone.Client.Utils
             Hooked = false;
             PendingDialog = null;
             FramesUntilDialog = -1;
+            lock (FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines) FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines.Clear();
             screen.SmokeLoad((short)Current.House);
             State = Phase.Loading;
         }
@@ -203,6 +211,12 @@ namespace Simitone.Client.Utils
                 return;
             }
             Current.LoadSeconds = LotTimer.Elapsed.TotalSeconds;
+            lock (FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines)
+            {
+                //saved object stacks that refer to routines which do not exist; each makes that object throw on its first tick
+                foreach (var line in FSO.SimAntics.Engine.VMStackFrame.UnresolvedRoutines.GroupBy(x => x).Take(30))
+                    Current.Problems.Add($"unresolved saved stack frame x{line.Count()}: {line.Key}");
+            }
             if (screen.ActiveFamily == null)
             {
                 //simless lot: the game keeps it at speed -1, the clock never runs, so only the load is checked
