@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <OutputType>WinExe</OutputType>
+    <RootNamespace>Simitone.Launcher</RootNamespace>
+    <AssemblyName>SimitoneLauncher</AssemblyName>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationIcon>..\Simitone.Windows\Icon.ico</ApplicationIcon>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>Simitone Launcher</Product>
+  </PropertyGroup>
+
+  <!-- game folder detection is shared with the game (classic registry key, Steam libraries, Legacy Collection) -->
+  <ItemGroup>
+    <Compile Include="..\Simitone.Windows\GameLocator\GameInstall.cs" Link="GameLocator\GameInstall.cs" />
+    <Compile Include="..\Simitone.Windows\GameLocator\KnownFolders.cs" Link="GameLocator\KnownFolders.cs" />
+    <Compile Include="..\Simitone.Windows\GameLocator\SteamGameFinder.cs" Link="GameLocator\SteamGameFinder.cs" />
+    <Compile Include="..\Simitone.Windows\GameLocator\ILocator.cs" Link="GameLocator\ILocator.cs" />
+    <Compile Include="..\Simitone.Windows\GameLocator\WindowsLocator.cs" Link="GameLocator\WindowsLocator.cs" />
+  </ItemGroup>
+
+</Project>

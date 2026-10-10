@@ -67,6 +67,8 @@ function Invoke-Native([string]$Exe, [string[]]$ArgList) {
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Project  = Join-Path $RepoRoot 'Client\Simitone\Simitone.Windows\Simitone.Windows.csproj'
+$LauncherProject = Join-Path $RepoRoot 'Client\Simitone\Simitone.Launcher\Simitone.Launcher.csproj'
+$LauncherBin     = Join-Path $RepoRoot "Client\Simitone\Simitone.Launcher\bin\$Configuration\net9.0-windows"
 $BinDir   = Join-Path $RepoRoot "Client\Simitone\Simitone.Windows\bin\$Configuration\net9.0-windows"
 if ([System.IO.Path]::IsPathRooted($OutputDir)) { $Deploy = $OutputDir } else { $Deploy = Join-Path $RepoRoot $OutputDir }
 
@@ -165,6 +167,10 @@ try {
     Invoke-Native dotnet @('build', $Project, '-c', $Configuration, '-nologo', '-v', 'minimal')
     if ($LASTEXITCODE -ne 0) { Fail 'dotnet build failed (see errors above).' }
     Write-Host ("    build finished in {0:N0}s" -f $sw.Elapsed.TotalSeconds)
+    # The launcher is small and has no engine dependencies; it is deployed next to the game.
+    Write-Step 'dotnet build Simitone Launcher'
+    Invoke-Native dotnet @('build', $LauncherProject, '-c', $Configuration, '-nologo', '-v', 'minimal')
+    if ($LASTEXITCODE -ne 0) { Fail 'dotnet build of the launcher failed (see errors above).' }
 }
 finally { Pop-Location }
 
@@ -216,6 +222,12 @@ if ($LASTEXITCODE -ge 8) { Fail "robocopy failed (exit $LASTEXITCODE). Is Simito
 $global:LASTEXITCODE = 0
 
 Copy-Item -LiteralPath (Join-Path $Deploy 'Simitone.exe') -Destination (Join-Path $Deploy 'Simitone.Windows.exe') -Force
+
+if (Test-Path (Join-Path $LauncherBin 'SimitoneLauncher.exe')) {
+    Invoke-Native robocopy @($LauncherBin, $Deploy, 'SimitoneLauncher.*', '/NFL', '/NDL', '/NJH', '/NJS', '/NP', '/R:2', '/W:1') | Out-Host
+    if ($LASTEXITCODE -ge 8) { Fail "robocopy of the launcher failed (exit $LASTEXITCODE)." }
+    $global:LASTEXITCODE = 0
+}
 
 $commit = ''
 if (Get-Command git -ErrorAction SilentlyContinue) {
