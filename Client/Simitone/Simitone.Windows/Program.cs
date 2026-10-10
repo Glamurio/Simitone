@@ -28,6 +28,8 @@ namespace Simitone.Windows
         [STAThread]
         static void Main(string[] args)
         {
+            //first thing: a crash anywhere below (including start-up) is written to Documents/Simitone/crash-log.txt.
+            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             Directory.SetCurrentDirectory(baseDir);
             AppDomain.CurrentDomain.AssemblyResolve += OnAssemblyResolve;
@@ -147,7 +149,6 @@ namespace Simitone.Windows
             useDX = MonogameLinker.Link(useDX);
 
             FSO.Files.ImageLoaderHelpers.BitmapFunction = BitmapReader;
-            AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
 
             FSOEnvironment.SoftwareDepth = false;
             FSOEnvironment.UseMRT = true;
@@ -210,6 +211,14 @@ namespace Simitone.Windows
         private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             var exception = e.ExceptionObject;
+            try
+            {
+                var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone");
+                Directory.CreateDirectory(dir);
+                File.AppendAllText(Path.Combine(dir, "crash-log.txt"),
+                    "=== " + DateTime.Now.ToString("s") + " " + string.Join(" ", Environment.GetCommandLineArgs().Skip(1)) + "\r\n" + exception + "\r\n\r\n");
+            }
+            catch (Exception) { }
             if (Simitone.Client.Utils.SmokeTest.Active != null)
             {
                 //unattended: record it where the harness can be read instead of waiting on a dialog.
