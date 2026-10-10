@@ -66,23 +66,58 @@ namespace Simitone.Client
         bool newChange = false;
         void Window_ClientSizeChanged(object sender, EventArgs e)
         {
-            if (newChange || !GlobalSettings.Default.Windowed || FSOEnvironment.SoftwareKeyboard) return;
+            if (newChange || FSOEnvironment.SoftwareKeyboard) return;
             if (Window.ClientBounds.Width == 0 || Window.ClientBounds.Height == 0) return;
+            //in fullscreen the window is the screen: follow it, but keep the windowed size for when we leave.
+            //(Before, this was skipped whenever "Windowed" was off, so fullscreen kept rendering at the windowed
+            //resolution, stretched, and the mouse position no longer matched what was drawn.)
+            SetBackBufferSize(Window.ClientBounds.Width, Window.ClientBounds.Height, !Graphics.IsFullScreen);
+        }
+
+        private void SetBackBufferSize(int width, int height, bool remember)
+        {
+            width = Math.Max(1, width);
+            height = Math.Max(1, height);
             newChange = true;
-            var width = Math.Max(1, Window.ClientBounds.Width);
-            var height = Math.Max(1, Window.ClientBounds.Height);
             Graphics.PreferredBackBufferWidth = width;
             Graphics.PreferredBackBufferHeight = height;
             Graphics.ApplyChanges();
-
-            GlobalSettings.Default.GraphicsWidth = width;
-            GlobalSettings.Default.GraphicsHeight = height;
-
+            if (remember)
+            {
+                GlobalSettings.Default.GraphicsWidth = width;
+                GlobalSettings.Default.GraphicsHeight = height;
+            }
             newChange = false;
             if (uiLayer?.CurrentUIScreen == null) return;
 
-            uiLayer.SpriteBatch.ResizeBuffer(GlobalSettings.Default.GraphicsWidth, GlobalSettings.Default.GraphicsHeight);
+            uiLayer.SpriteBatch.ResizeBuffer(width, height);
             uiLayer.CurrentUIScreen.GameResized();
+        }
+
+        private bool LastFullScreen;
+
+        /// <summary>
+        /// Fullscreen can be entered from the settings dialog, Alt+Enter or start-up. Whichever it was, the back buffer
+        /// has to match the screen, the windowed size has to come back afterwards, and the mouse is kept in the window.
+        /// </summary>
+        private void UpdateDisplayMode()
+        {
+            if (FSOEnvironment.SoftwareKeyboard) return;
+            var full = Graphics.IsFullScreen;
+            if (full != LastFullScreen)
+            {
+                LastFullScreen = full;
+                GlobalSettings.Default.Windowed = !full;
+                if (full)
+                {
+                    var mode = GraphicsDevice.Adapter.CurrentDisplayMode;
+                    SetBackBufferSize(mode.Width, mode.Height, false);
+                }
+                else SetBackBufferSize(GlobalSettings.Default.GraphicsWidth, GlobalSettings.Default.GraphicsHeight, true);
+            }
+
+            var confine = Simitone.Client.Utils.SimitoneSettings.Default.ConfineMouse;
+            Simitone.Client.Utils.MouseConfine.Update(Window.Handle, IsActive && (confine == 2 || (confine == 1 && full)));
         }
 
         /// <summary>
@@ -268,6 +303,7 @@ namespace Simitone.Client
         /// </summary>
         protected override void UnloadContent()
         {
+            Simitone.Client.Utils.MouseConfine.Update(IntPtr.Zero, false);
             // TODO: Unload any non ContentManager content here
         }
 
@@ -297,6 +333,7 @@ namespace Simitone.Client
             }
             GameThread.UpdateExecuting = true;
 
+            UpdateDisplayMode();
             if (HITVM.Get() != null) HITVM.Get().Tick();
 
             base.Update(gameTime);
