@@ -64,7 +64,8 @@ namespace Simitone.Client.UI.Screens
         private float LastSoundIntensity = -1;
         private WeatherType LastWeatherType = WeatherType.Rain;
         private bool LastThunder = false;
-        private bool TerrainSnowApplied = false;
+        private int TerrainGround = -1; //ground shown on this lot's terrain: 0 as the lot is, 1 autumn, 2 snow (-1 not yet applied)
+        private SeasonDriver SeasonControl = new SeasonDriver();
         private float ThunderTimer = 0f;
         private Random ThunderRandom = new Random();
         private short? PendingWeatherData = null;
@@ -483,6 +484,8 @@ namespace Simitone.Client.UI.Screens
             if (vm?.Context?.Blueprint?.Weather == null) return;
 
             var weather = vm.Context.Blueprint.Weather;
+            var settings = SimitoneSettings.Default;
+            SeasonControl.Update(vm, weather, settings.Seasons, settings.SeasonLength);
             var currentType = weather.WeatherType;
             var currentThunder = weather.IsThunder;
             var currentIntensity = weather.WeatherIntensity;
@@ -505,45 +508,32 @@ namespace Simitone.Client.UI.Screens
             else
                 WeatherSounds.ResumeRain();
 
+            //ground: snow while it snows or all winter, autumn grass in autumn, otherwise as the lot is.
+            var terrain = vm.Context.Blueprint.Terrain;
+            if (terrain != null)
+            {
+                int ground = 0;
+                if ((currentType == WeatherType.Snow && currentIntensity > 0.1f) || weather.HasSnowCover) ground = 2;
+                else if (settings.Seasons && SeasonControl.Current == FSO.SimAntics.Seasons.Season.Autumn) ground = 1;
+                if (ground != TerrainGround)
+                {
+                    terrain.SetSeasonGround(ground);
+                    TerrainGround = ground;
+                }
+            }
+
             bool stateChanged = currentType != LastWeatherType ||
                               currentThunder != LastThunder ||
                               Math.Abs(currentIntensity - LastSoundIntensity) > 0.05f;
 
             if (!stateChanged) return;
 
-            if (currentType == WeatherType.Rain && currentIntensity > 0.1f)
+            if (currentType == WeatherType.Rain && currentIntensity > 0.1f && !weather.IsHeatwave)
                 WeatherSounds.PlayRain(currentIntensity);
             else
             {
                 WeatherSounds.StopRain();
                 ThunderTimer = 0f;
-            }
-
-            if (vm?.Context?.Blueprint?.Terrain != null)
-            {
-                if (currentType == WeatherType.Snow && currentIntensity > 0.1f)
-                {
-                    // if it's snowing, make the grass snowy
-                    if (!TerrainSnowApplied)
-                    {
-                        var terrain = vm.Context.Blueprint.Terrain;
-                        terrain.ForceSnow(0);
-                        terrain.UpdateLotType();
-                        terrain.TerrainDirty = true;
-                        TerrainSnowApplied = true;
-                    }
-                }
-                else
-                {   // remove it when it stops #TODO, don't do this on snow vacation lots
-                    if (TerrainSnowApplied)
-                    {
-                        var terrain = vm.Context.Blueprint.Terrain;
-                        terrain.ForceSnow(1);
-                        terrain.UpdateLotType();
-                        terrain.TerrainDirty = true;
-                        TerrainSnowApplied = false;
-                    }
-                }
             }
 
             LastWeatherType = currentType;
@@ -567,6 +557,8 @@ namespace Simitone.Client.UI.Screens
 
             if (ZoomLevel < 4) ZoomLevel = 5;
             WeatherSounds.StopRain();
+            TerrainGround = -1;
+            SeasonControl.Reset();
             LastSoundIntensity = -1;
             LastWeatherType = WeatherType.Rain;
             LastThunder = false;

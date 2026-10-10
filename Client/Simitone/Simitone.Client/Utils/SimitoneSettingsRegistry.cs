@@ -125,6 +125,19 @@ namespace Simitone.Client.Utils
                     SaveS();
                 }, departure: true));
 
+            list.Add(Toggle(SIMULATION, "Seasons",
+                "The calendar drives the weather: snow and snow-covered ground in winter, storms and heatwaves in summer, rain and fog in autumn, showers in spring, with a light tint for each season. Off keeps the original random weather.",
+                () => S.Seasons, (v) => { S.Seasons = v; S.Save(); }, departure: true));
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = SIMULATION, Label = "Season length",
+                Help = "How many days each season lasts. 90 days is three months per season (a standard year). 30 days makes every month a season (compact year); 10 days makes each season a short stretch (compact month).",
+                Choices = new string[] { "10 days", "15 days", "30 days", "45 days", "90 days" },
+                Get = () => Math.Max(0, Math.Min(4, S.SeasonLength)),
+                Set = (i) => { S.SeasonLength = i; S.Save(); },
+                Departure = true
+            });
+
             //--- camera and controls
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
                 () => G.EdgeScroll, (v) => { G.EdgeScroll = v; G.Save(); }));

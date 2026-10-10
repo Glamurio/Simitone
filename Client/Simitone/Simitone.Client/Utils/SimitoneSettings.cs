@@ -46,6 +46,10 @@ namespace Simitone.Client.Utils
             { "QueueRecovery", "true" },
             { "Conversations", "true" },
 
+            //seasons
+            { "Seasons", "true" },
+            { "SeasonLength", "4" },
+
             //interface
             { "QueueNotices", "true" },
             { "CameraShortcuts", "true" },
@@ -95,6 +99,11 @@ namespace Simitone.Client.Utils
         public bool AutonomyCountOnce { get; set; }
         public bool QueueRecovery { get; set; }
         public bool Conversations { get; set; }
+
+        /// <summary>The calendar drives the weather, snow cover and light tint (FSO.SimAntics.Seasons).</summary>
+        public bool Seasons { get; set; }
+        /// <summary>Index into SeasonModel.SeasonLengths: 10, 15, 30, 45 or 90 days per season (default 4 = 90).</summary>
+        public int SeasonLength { get; set; }
 
         public bool QueueNotices { get; set; }
         public bool CameraShortcuts { get; set; }

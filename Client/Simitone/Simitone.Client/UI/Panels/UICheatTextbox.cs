@@ -113,6 +113,13 @@ namespace Simitone.Client.UI.Panels
                 return;
             }
 
+            if (trimRepetitions(commandString).StartsWith("season", StringComparison.OrdinalIgnoreCase))
+            {
+                HandleSeasonCommand(commandString);
+                baseTextbox.CurrentText = "";
+                return;
+            }
+
             var cheat = new VMNetCheatCmd();
             var context = new VMCheatContext();
             var repetitions = getRepetitions(commandString);
@@ -278,6 +285,25 @@ namespace Simitone.Client.UI.Panels
             return context;
         }
 
+        /// <summary>"season spring|summer|autumn|winter": moves the calendar to the first day of that season (at the current season length).</summary>
+        private void HandleSeasonCommand(string command)
+        {
+            var parts = command.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            FSO.SimAntics.Seasons.Season season;
+            if (parts.Length < 2 || ts1VM?.Context?.Clock == null || !Enum.TryParse(parts[1], true, out season) || !Enum.IsDefined(typeof(FSO.SimAntics.Seasons.Season), season))
+            {
+                FSO.HIT.HITVM.Get().PlaySoundEvent(UISounds.Error);
+                return;
+            }
+            var length = FSO.SimAntics.Seasons.SeasonModel.LengthFromIndex(Simitone.Client.Utils.SimitoneSettings.Default.SeasonLength);
+            var day = FSO.SimAntics.Seasons.SeasonModel.FirstDayOfSeason(season, length);
+            ts1VM.Context.Clock.Month = day / FSO.SimAntics.Seasons.SeasonModel.DaysPerMonth + 1;
+            ts1VM.Context.Clock.DayOfMonth = day % FSO.SimAntics.Seasons.SeasonModel.DaysPerMonth + 1;
+            Simitone.Client.Utils.SeasonDriver.ManualOverride = false;
+            Simitone.Client.Utils.SeasonDriver.ForceReapply = true;
+            FSO.HIT.HITVM.Get().PlaySoundEvent(UISounds.Click);
+        }
+
         private void HandleWeatherCommand(string command)
         {
             var parts = command.ToLower().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
@@ -311,6 +337,15 @@ namespace Simitone.Client.UI.Panels
                 case "snow":
                     weatherData = (short)((1 << 8) | (1 << 9) | intensity);
                     break;
+                case "fog":
+                    if (parts.Length < 3) intensity = 60;
+                    weatherData = (short)((1 << 8) | (3 << 9) | intensity);
+                    break;
+                case "heat":
+                case "heatwave":
+                    if (parts.Length < 3) intensity = 80;
+                    weatherData = (short)((1 << 8) | (1 << 12) | intensity);
+                    break;
                 case "hail":
                     weatherData = (short)((1 << 8) | (2 << 9) | intensity);
                     break;
@@ -325,6 +360,9 @@ namespace Simitone.Client.UI.Panels
                     return;
             }
 
+            //a chosen weather stays until "weather auto"; auto hands the sky back to the seasons (or the original random weather).
+            Simitone.Client.Utils.SeasonDriver.ManualOverride = weatherType != "auto";
+            Simitone.Client.Utils.SeasonDriver.ForceReapply = weatherType == "auto";
             if (ts1VM?.Context?.Blueprint?.Weather != null)
             {
                 ts1VM.Context.Blueprint.Weather.SetWeather(weatherData);

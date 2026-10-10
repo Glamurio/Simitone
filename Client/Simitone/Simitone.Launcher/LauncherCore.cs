@@ -151,6 +151,11 @@ namespace Simitone.Launcher
                 "All of Simitone's corrections to the original game in one switch: routing, action queues, free will and object data fixes "
                 + "(trash and dirt piles no longer multiply, fireplaces ignite things far less often). Objects already loaded keep their old behaviour until the next lot.", true));
 
+            list.Add(Toggle(S, SIMULATION, "Seasons", "Seasons",
+                "The calendar drives the weather: snow and snow-covered ground in winter, storms and heatwaves in summer, rain and fog in autumn, showers in spring, with a light tint for each season.", true));
+            list.Add(Choice(S, SIMULATION, "SeasonLength", "Season length", "How many days each season lasts (90 = three months, 30 = one month, 10 = compact).",
+                new[] { "10 days", "15 days", "30 days", "45 days", "90 days" }, Numbers(0, 5), "4"));
+
             list.Add(Toggle(C, INTERFACE, "EdgeScroll", "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.", true));
             list.Add(Toggle(S, INTERFACE, "CameraShortcuts", "Camera shortcuts",
                 "Arrows or WASD pan, Q/E (or , and .) rotate, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).", true));
