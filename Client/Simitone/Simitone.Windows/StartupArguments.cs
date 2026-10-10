@@ -1,0 +1,62 @@
+using System.Collections.Generic;
+
+namespace Simitone.Windows
+{
+    /// <summary>
+    /// The command line switches Simitone understands (apart from -path, see PathArgument). A switch that is not present
+    /// stays null so the value from simitone.ini applies. Malformed input is ignored instead of throwing: an empty
+    /// argument (which a launcher or a shortcut can produce) or "-hz" / "-langX" used to crash the game on start-up.
+    /// </summary>
+    public class StartupArguments
+    {
+        public bool Ide;
+        public bool? ThreeD;
+        public bool? AntiAlias;
+        public bool Jit;
+        public bool? UseDirectX;
+        public bool? Touch;
+        public bool? NoSound;
+        public byte? Language;
+        public int? RefreshRate;
+        /// <summary>Arguments that were not understood, for the start-up log.</summary>
+        public List<string> Ignored = new List<string>();
+
+        public static StartupArguments Parse(string[] args)
+        {
+            var result = new StartupArguments();
+            if (args == null) return result;
+            foreach (var arg in args)
+            {
+                if (string.IsNullOrEmpty(arg) || arg[0] != '-') { if (!string.IsNullOrEmpty(arg)) result.Ignored.Add(arg); continue; }
+                var cmd = arg.Substring(1);
+                if (cmd.StartsWith("path")) continue; //PathArgument
+                if (cmd.StartsWith("lang"))
+                {
+                    if (byte.TryParse(cmd.Substring(4), out var lang)) result.Language = lang; else result.Ignored.Add(arg);
+                }
+                else if (cmd.StartsWith("hz"))
+                {
+                    if (int.TryParse(cmd.Substring(2), out var hz) && hz > 0) result.RefreshRate = hz; else result.Ignored.Add(arg);
+                }
+                else
+                {
+                    switch (cmd)
+                    {
+                        case "ide": result.Ide = true; break;
+                        case "3d": result.ThreeD = true; break;
+                        case "aa": result.AntiAlias = true; break;
+                        case "jit": result.Jit = true; break;
+                        case "dx":
+                        case "dx11": result.UseDirectX = true; break;
+                        case "gl":
+                        case "ogl": result.UseDirectX = false; break;
+                        case "touch": result.Touch = true; break;
+                        case "nosound": result.NoSound = true; break;
+                        default: result.Ignored.Add(arg); break;
+                    }
+                }
+            }
+            return result;
+        }
+    }
+}

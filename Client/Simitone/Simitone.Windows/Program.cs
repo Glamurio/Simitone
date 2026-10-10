@@ -65,51 +65,16 @@ namespace Simitone.Windows
 
             FSOEnvironment.Args = string.Join(" ", args);
 
-            foreach (var arg in args)
-            {
-                if (arg[0] == '-')
-                {
-                    var cmd = arg.Substring(1);
-                    if (cmd.StartsWith("lang"))
-                    {
-                        GlobalSettings.Default.LanguageCode = byte.Parse(cmd.Substring(4));
-                    }
-                    else if (cmd.StartsWith("hz")) GlobalSettings.Default.TargetRefreshRate = int.Parse(cmd.Substring(2));
-                    else
-                    {
-                        //normal style param
-                        switch (cmd)
-                        {
-                            case "ide":
-                                ide = true;
-                                break;
-                            case "3d":
-                                FSOEnvironment.Enable3D = true;
-                                break;
-                            case "aa":
-                                aa = true;
-                                break;
-                            case "jit":
-                                jit = true;
-                                break;
-                            case "dx":
-                            case "dx11":
-                                useDX = true;
-                                break;
-                            case "gl":
-                            case "ogl":
-                                useDX = false;
-                                break;
-                            case "touch":
-                                FSOEnvironment.SoftwareKeyboard = true;
-                                break;
-                            case "nosound":
-                                FSOEnvironment.NoSound = true;
-                                break;
-                        }
-                    }
-                }
-            }
+            var switches = StartupArguments.Parse(args);
+            if (switches.Language.HasValue) GlobalSettings.Default.LanguageCode = switches.Language.Value;
+            if (switches.RefreshRate.HasValue) GlobalSettings.Default.TargetRefreshRate = switches.RefreshRate.Value;
+            ide = switches.Ide;
+            jit = switches.Jit;
+            if (switches.ThreeD.HasValue) FSOEnvironment.Enable3D = switches.ThreeD.Value;
+            if (switches.AntiAlias.HasValue) aa = switches.AntiAlias.Value;
+            if (switches.UseDirectX.HasValue) useDX = switches.UseDirectX.Value;
+            if (switches.Touch.HasValue) FSOEnvironment.SoftwareKeyboard = switches.Touch.Value;
+            if (switches.NoSound.HasValue) FSOEnvironment.NoSound = switches.NoSound.Value;
             #endregion
 
             //game folder: -path on the command line, else the one saved in Options > Settings > Debug, else auto-detected.
