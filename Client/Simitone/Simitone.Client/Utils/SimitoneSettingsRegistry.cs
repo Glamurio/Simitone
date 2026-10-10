@@ -156,6 +156,9 @@ namespace Simitone.Client.Utils
                 Get = () => Math.Max(0, Math.Min(3, S.PanSpeed)),
                 Set = (i) => { S.PanSpeed = i; S.Save(); }
             });
+            list.Add(Toggle(CONTROLS, "Stepped wheel zoom (2D)",
+                "The mouse wheel moves one view distance per notch, like the original game, instead of zooming smoothly.",
+                () => S.SteppedZoom, (v) => { S.SteppedZoom = v; S.Save(); }, departure: false));
             list.Add(new SimitoneSettingDef()
             {
                 Section = CONTROLS, Label = "Keep mouse in the window",

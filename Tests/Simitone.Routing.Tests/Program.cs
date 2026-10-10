@@ -16,7 +16,8 @@ namespace Simitone.Routing.Tests
                 .Concat(DiagnosticsTests.All())
                 .Concat(SelectionTests.All())
                 .Concat(AutonomyTests.All())
-                .Concat(PathArgumentTests.All());
+                .Concat(PathArgumentTests.All())
+                .Concat(ZoomStepTests.All());
             foreach (var (name, test) in tests)
             {
                 total++;
