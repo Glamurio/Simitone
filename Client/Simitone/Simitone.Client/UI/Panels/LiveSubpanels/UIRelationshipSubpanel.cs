@@ -92,6 +92,17 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             var rel = n.Relationships;
 
             var rItems = rel.Select(x => new Tuple<int,int>(neighbour, x.Key)).ToList();
+            if (RelSort == 2)
+            {
+                //Fame tab: Sims who have a fame score (person data 80 = score, 81 = star power), the most famous first.
+                //(The Friends and Family tabs don't filter yet: how the original tells them apart isn't known.)
+                Func<int, int> power = (id) =>
+                {
+                    var data = neighbourhood.GetNeighborByID((short)id)?.PersonData;
+                    return (data != null && data.Length > 81) ? data[81] * 1000 + data[80] : 0;
+                };
+                rItems = rItems.Where(x => power(x.Item2) > 0).OrderByDescending(x => power(x.Item2)).ToList();
+            }
 
             bool difference = false;
             if (rItems.Count == Items.Count)
