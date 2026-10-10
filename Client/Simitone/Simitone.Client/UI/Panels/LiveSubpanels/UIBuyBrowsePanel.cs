@@ -890,6 +890,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
         public override void Update(UpdateState state)
         {
             Invalidate();
+            Catalog.UICatalogItem.GenerateMissing(Game.vm);
             if (UndoBtn != null)
             {
                 var history = Game.LotControl?.BuildUndo;

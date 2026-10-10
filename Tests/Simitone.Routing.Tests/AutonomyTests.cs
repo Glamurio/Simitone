@@ -32,6 +32,8 @@ namespace Simitone.Routing.Tests
                 Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2003 }) == 2003, "SofaLoveSeatAOL: strings 2000, picture 2003");
                 Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2001, 2002 }) == -1, "ambiguous: no guess");
                 Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 4000, 6000 }) == -1, "only non-catalog pictures");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2005, new[] { 2004 }, new[] { 2004 }) == -1, "another object's picture is not borrowed");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2001, 2002, 2003, 2004 }) == -1, "EP7 sculptures: four pictures of other objects");
             });
 
             yield return ("lockout filter off: nothing is skipped", () =>

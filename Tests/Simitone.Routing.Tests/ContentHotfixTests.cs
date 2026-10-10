@@ -33,8 +33,51 @@ namespace Simitone.Routing.Tests
             };
         }
 
+        //Fireplaces.iff 4112: node 1 is random_number(Local[0], Tuning[8]); BCON 4096 constant 8 is 750.
+        private static BHAV BurnSomething(string label = "burn something")
+        {
+            return new BHAV
+            {
+                ChunkLabel = label,
+                Instructions = new[]
+                {
+                    new BHAVInstruction { Opcode = 4100, Operand = new byte[8] },
+                    new BHAVInstruction { Opcode = 8, Operand = new byte[] { 0x00, 0x00, 0x19, 0x00, 0x08, 0x00, 0x1a, 0x00 } },
+                }
+            };
+        }
+
+        private static BCON FireTuning()
+        {
+            return new BCON { ChunkID = 4096, Constants = new ushort[] { 30, 45, 60, 75, 5, 10, 15, 20, 750, 3 } };
+        }
+
         public static IEnumerable<(string, Action)> All()
         {
+            yield return ("fireplace ignition: the roll range is 10x larger, i.e. 1/7500 instead of 1/750", () =>
+            {
+                var t = FireTuning();
+                Check(ContentHotfixes.ReduceFireplaceIgnition(BurnSomething(), t, 10), "not patched");
+                Check(t.Constants[8] == 7500, "range is " + t.Constants[8]);
+                Check(t.Constants[9] == 3 && t.Constants[0] == 30, "other tuning constants untouched");
+            });
+
+            yield return ("fireplace ignition: ignition stays possible (never scaled to zero or past the 16-bit signed range)", () =>
+            {
+                Check(ContentHotfixes.ScaleIgnitionRange(750, 10) > 0, "positive");
+                Check(ContentHotfixes.ScaleIgnitionRange(30000, 10) == short.MaxValue, "capped");
+                Check(ContentHotfixes.ScaleIgnitionRange(750, 1) == 750 && ContentHotfixes.ScaleIgnitionRange(750, 0) == 750, "divisor 1 or less is a no-op");
+            });
+
+            yield return ("fireplace ignition: other BHAVs and other rolls are untouched", () =>
+            {
+                var t = FireTuning();
+                Check(!ContentHotfixes.ReduceFireplaceIgnition(BurnSomething("something else"), t, 10), "unrelated label");
+                var other = BurnSomething();
+                other.Instructions[1].Operand = new byte[] { 0x00, 0x00, 0x19, 0x00, 0x08, 0x00, 0x07, 0x00 }; //literal range, not Tuning
+                Check(!ContentHotfixes.ReduceFireplaceIgnition(other, t, 10), "not a Tuning roll");
+                Check(t.Constants[8] == 750, "tuning unchanged");
+            });
             yield return ("pile cap: SOAttr[1] := 10 becomes SOAttr[0] := 10", () =>
             {
                 var b = IncTrashAmount("inc trash amount", new byte[] { 1, 0, 10, 0, 0, 5, 1, 7 });

@@ -7,6 +7,10 @@ using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Simitone.Client.UI.Controls;
 using Simitone.Client.UI.Model;
+using FSO.SimAntics;
+using FSO.SimAntics.Entities;
+using FSO.LotView.Model;
+using FSO.UI.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,6 +24,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels.Catalog
         public static Dictionary<uint, Texture2D> IconCache = new Dictionary<uint, Texture2D>();
         public Texture2D BG;
         public Texture2D Icon;
+        private uint ObjGUID;
         public Texture2D Outline;
         public bool Outlined;
 
@@ -30,6 +35,8 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels.Catalog
         {
             DrawLocalTexture(SBatch, BG, null, new Vector2(BG.Width-90, BG.Height-105) / -2, Vector2.One, new Color(104, 164, 184, 255));
             var iconSize = 55f;
+            //a picture drawn from the object's own sprites arrives later (GenerateMissing).
+            if (Icon == null && ObjGUID != 0 && IconCache.TryGetValue(ObjGUID, out var drawn)) Icon = drawn;
             if (Icon != null)
             {
                 
@@ -50,6 +57,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels.Catalog
         {
             BG = Content.Get().CustomUI.Get("pswitch_icon_bg.png").Get(GameFacade.GraphicsDevice);
             Icon = (elem.Special?.Res != null) ? elem.Special.Res.GetIcon(elem.Special.ResID) : GetObjIcon(elem.Item.GUID);
+            if (elem.Special == null) ObjGUID = elem.Item.GUID;
             Outline = Content.Get().CustomUI.Get("pswitch_icon_sel.png").Get(GameFacade.GraphicsDevice);
 
             PriceLabel = new UILabel();
@@ -88,13 +96,44 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels.Catalog
                 }
                 var bmp = obj.GetCatalogBmp();
                 if (bmp != null) IconCache[GUID] = bmp.GetTexture(GameFacade.GraphicsDevice);
-                else IconCache[GUID] = null;
+                else
+                {
+                    //No catalog picture in the object's files (EP6/EP7 sculptures, EP7 cookbook, ...): draw one from its sprites.
+                    IconCache[GUID] = null;
+                    if (Requested.Add(GUID)) Pending.Enqueue(GUID);
+                }
             }
             return IconCache[GUID];
         }
 
+        private static readonly HashSet<uint> Requested = new HashSet<uint>();
+        private static readonly Queue<uint> Pending = new Queue<uint>();
+
+        /// <summary>
+        /// Draws one missing catalog picture per call, from a hidden ghost copy of the object (the same renderer as the
+        /// object info panel, laid out like a catalog picture). Called from the catalog's Update, never from Draw.
+        /// </summary>
+        public static void GenerateMissing(VM vm)
+        {
+            if (Pending.Count == 0 || vm?.Context?.World == null || FSO.Common.FSOEnvironment.Enable3D) return;
+            var guid = Pending.Dequeue();
+            VMMultitileGroup group = null;
+            try
+            {
+                group = vm.Context.CreateObjectInstance(guid, LotTilePos.OUT_OF_WORLD, Direction.NORTH, true);
+                if (group != null) IconCache[guid] = CatThumbGenerator.GenerateThumb(group, vm);
+            }
+            catch (Exception) { /* leaves the item without a picture, as before */ }
+            finally
+            {
+                try { group?.Delete(vm.Context); } catch (Exception) { }
+            }
+        }
+
         public static void ClearIconCache()
         {
+            Requested.Clear();
+            Pending.Clear();
             foreach (var item in IconCache)
             {
                 item.Value?.Dispose();
