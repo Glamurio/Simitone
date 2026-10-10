@@ -353,6 +353,7 @@ namespace Simitone.Client.UI.Screens
             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
             GameFacade.Game.IsMouseVisible = Visible;
 
+            Simitone.Client.UI.Utils.UITextFocus.ClearOnOutsideClick(state);
             var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
             if (!typing)
             {

@@ -106,20 +106,47 @@ namespace Simitone.Windows
                             case "nosound":
                                 FSOEnvironment.NoSound = true;
                                 break;
-                            case string s when s.StartsWith("path"): //The Sims path
-                                path = s.Length > 4 ? s.Substring(4).Trim('"').Replace('\\', '/') + "/" : path;
-                                pathGiven = s.Length > 4;
-                                break;
                         }
                     }
                 }
             }
             #endregion
+
+            //game folder: -path on the command line, else the one saved in Options > Settings > Debug, else auto-detected.
+            Simitone.Client.Utils.SimitoneSettingsRegistry.BrowseGameFolder = () =>
+            {
+                using (var dialog = new FolderBrowserDialog())
+                {
+                    dialog.Description = "Choose the folder of The Sims 1 (it contains GameData\\Behavior.iff).";
+                    dialog.ShowNewFolderButton = false;
+                    return dialog.ShowDialog() == DialogResult.OK ? dialog.SelectedPath : null;
+                }
+            };
+            Simitone.Client.Utils.SimitoneSettingsRegistry.IsValidGameFolder = GameInstall.IsValid;
+            var origin = path == null ? "not found" : "auto-detected";
+            if (!string.IsNullOrWhiteSpace(startup.GamePath) && GameInstall.IsValid(startup.GamePath.Trim().Replace('\\', '/')))
+            {
+                path = PathArgument.Normalise(startup.GamePath.Trim());
+                pathGiven = true;
+                origin = "saved in settings";
+            }
+            if (PathArgument.TryGet(args, out var argPath))
+            {
+                if (argPath != null)
+                {
+                    path = PathArgument.Normalise(argPath);
+                    pathGiven = true;
+                    origin = "command line (-path)";
+                }
+                else pathGiven = false; //-path with nothing after it: fall back to the settings/auto-detected folder
+            }
+            if (path != null) Simitone.Client.Utils.GameSourceInfo.Set(path, origin, GameInstall.IsLegacyCollection(path));
+
             if (path == null || (pathGiven && !GameInstall.IsValid(path)))
             {
                 //nothing to start with: say why instead of closing silently.
                 MessageBox.Show("Simitone could not find The Sims 1 (no GameData/Behavior.iff in " + (path ?? "any known install location") + ").\n\n" +
-                    "Start Simitone with -path\"C:\\path\\to\\The Sims\" to point it at the game folder " +
+                    "Start Simitone with -path \"C:\\path\\to\\The Sims\" (or set the folder in Options > Settings > Debug) to point it at the game folder " +
                     "(for Steam: ...\\steamapps\\common\\The Sims Legacy Collection).", "Simitone", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }

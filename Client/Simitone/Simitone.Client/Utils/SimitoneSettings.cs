@@ -49,10 +49,12 @@ namespace Simitone.Client.Utils
             //interface
             { "QueueNotices", "true" },
             { "CameraShortcuts", "true" },
+            { "PanSpeed", "2" },
             { "CatalogSearch", "true" },
             { "BuildUndo", "true" },
 
             //debugging
+            { "GamePath", "" },
             { "Diagnostics", "true" },
             { "DrawRoutes", "false" },
 
@@ -87,9 +89,13 @@ namespace Simitone.Client.Utils
 
         public bool QueueNotices { get; set; }
         public bool CameraShortcuts { get; set; }
+        /// <summary>Index into UICameraShortcuts.PanSpeeds.</summary>
+        public int PanSpeed { get; set; }
         public bool CatalogSearch { get; set; }
         public bool BuildUndo { get; set; }
 
+        /// <summary>Folder of The Sims 1; empty = auto-detect. -path on the command line wins.</summary>
+        public string GamePath { get; set; }
         public bool Diagnostics { get; set; }
         public bool DrawRoutes { get; set; }
 

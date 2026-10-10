@@ -29,6 +29,8 @@ namespace Simitone.Client.Utils
         public string ActionLabel;
         /// <summary>Optional: the action button's text, re-read after each click (for actions that toggle something).</summary>
         public Func<string> ActionState;
+        /// <summary>Optional: the description, re-read each time it is shown (for rows that display a current value).</summary>
+        public Func<string> HelpState;
 
         public static readonly string[] OffOn = new string[] { "Off", "On" };
     }
@@ -49,6 +51,10 @@ namespace Simitone.Client.Utils
 
         /// <summary>Set by the client to write the diagnostics report (needs the running VM).</summary>
         public static Func<string> WriteDiagnostics;
+        /// <summary>Set by the platform start-up: shows a folder picker, returns the chosen folder or null.</summary>
+        public static Func<string> BrowseGameFolder;
+        public static Func<string, bool> IsValidGameFolder;
+        private static string GameFolderMessage;
 
         private static SimitoneSettings S => SimitoneSettings.Default;
         private static GlobalSettings G => GlobalSettings.Default;
@@ -140,8 +146,16 @@ namespace Simitone.Client.Utils
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",
                 () => G.EdgeScroll, (v) => { G.EdgeScroll = v; G.Save(); }));
             list.Add(Toggle(CONTROLS, "Camera shortcuts",
-                "Arrows pan, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).",
+                "Arrows or WASD pan, Q/E (or , and .) rotate, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).",
                 () => S.CameraShortcuts, (v) => { S.CameraShortcuts = v; S.Save(); }, departure: true));
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = CONTROLS, Label = "Keyboard pan speed",
+                Help = "How fast the arrow keys and WASD move the camera.",
+                Choices = new string[] { "Slow", "Normal", "Fast", "Very fast" },
+                Get = () => Math.Max(0, Math.Min(3, S.PanSpeed)),
+                Set = (i) => { S.PanSpeed = i; S.Save(); }
+            });
             list.Add(Toggle(CONTROLS, "Catalog search and wheel scrolling",
                 "Search box in the buy catalog; the mouse wheel scrolls the catalog when over it. Reopen the catalog to apply.",
                 () => S.CatalogSearch, (v) => { S.CatalogSearch = v; S.Save(); }, departure: true));
@@ -220,6 +234,52 @@ namespace Simitone.Client.Utils
             });
 
             //--- debug
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = DEBUG, Label = "Game folder", RestartRequired = true,
+                Help = "The Sims 1 install Simitone uses.",
+                HelpState = () => "Game folder: " + (GameSourceInfo.GamePath ?? "none")
+                    + "\nType: " + GameSourceInfo.InstallKind + ", chosen by " + GameSourceInfo.Origin
+                    + (string.IsNullOrEmpty(S.GamePath) ? "" : "\nSaved for next start: " + S.GamePath)
+                    + "\n(-path on the command line wins over this setting.)"
+                    + (GameFolderMessage == null ? "" : "\n" + GameFolderMessage),
+                ActionLabel = "Change...",
+                ActionState = () => string.IsNullOrEmpty(S.GamePath) ? "Change..." : "Change... (custom)",
+                Action = () =>
+                {
+                    var chosen = BrowseGameFolder?.Invoke();
+                    if (chosen == null) return;
+                    if (IsValidGameFolder != null && !IsValidGameFolder(chosen))
+                    {
+                        GameFolderMessage = "Not changed: " + chosen + " has no GameData/Behavior.iff.";
+                        return;
+                    }
+                    GameFolderMessage = "Saved: " + chosen + " (used from the next start).";
+                    S.GamePath = chosen;
+                    S.Save();
+                }
+            });
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = DEBUG, Label = "Reset game folder", RestartRequired = true,
+                Help = "Forget the saved game folder and auto-detect the install again at the next start.",
+                ActionLabel = "Reset",
+                Action = () => { S.GamePath = ""; GameFolderMessage = "Cleared; the install is auto-detected at the next start."; S.Save(); }
+            });
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = DEBUG, Label = "Saves in use",
+                Help = "Where your neighbourhoods are.",
+                HelpState = () => "Simitone works on its own copy of your neighbourhoods:\n" + GameSourceInfo.SimitoneUserData
+                    + "\nCopied from: " + GameSourceInfo.SaveCopySource()
+                    + "\nThe original game's saves are never changed.",
+                ActionLabel = "Open folder",
+                Action = () =>
+                {
+                    try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(GameSourceInfo.SimitoneUserData) { UseShellExecute = true }); }
+                    catch (Exception) { }
+                }
+            });
             list.Add(Toggle(DEBUG, "Draw routes", "Show route rectangles, paths and shimmy gaps (also: draw_routes cheat).",
                 () => S.DrawRoutes, (v) => { S.DrawRoutes = v; SaveS(); }));
             list.Add(Toggle(DEBUG, "Record diagnostics", "Keep each Sim's recent route events and why actions ended.",

@@ -343,13 +343,13 @@ namespace Simitone.Client.UI.Panels.Desktop
                     {
                         //if the zoom or rotation buttons are down, gradually change their values.
                         var cam = Game.vm.Context.World.State.Cameras.Camera3D;
-                        if (RotateCWButton.IsDown || state.KeyboardState.IsKeyDown(Keys.OemPeriod)) cam.RotationX += 2f / FSOEnvironment.RefreshRate;
-                        if (RotateCCWButton.IsDown || state.KeyboardState.IsKeyDown(Keys.OemComma)) cam.RotationX -= 2f / FSOEnvironment.RefreshRate;
+                        if (RotateCWButton.IsDown || state.KeyboardState.IsKeyDown(Keys.OemPeriod) || (state.KeyboardState.IsKeyDown(Keys.E) && !state.CtrlDown)) cam.RotationX += 2f / FSOEnvironment.RefreshRate;
+                        if (RotateCCWButton.IsDown || state.KeyboardState.IsKeyDown(Keys.OemComma) || (state.KeyboardState.IsKeyDown(Keys.Q) && !state.CtrlDown)) cam.RotationX -= 2f / FSOEnvironment.RefreshRate;
                     }
                     else
                     {
-                        if (keys.Contains(Keys.OemComma)) RotateCounterClockwise(null);
-                        if (keys.Contains(Keys.OemPeriod)) RotateClockwise(null);
+                        if (keys.Contains(Keys.OemComma) || (keys.Contains(Keys.Q) && !state.CtrlDown)) RotateCounterClockwise(null);
+                        if (keys.Contains(Keys.OemPeriod) || (keys.Contains(Keys.E) && !state.CtrlDown)) RotateClockwise(null);
                     }
                     if (activeCamera.UseZoomHold)
                     {

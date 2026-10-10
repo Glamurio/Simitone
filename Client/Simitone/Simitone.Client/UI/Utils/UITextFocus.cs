@@ -2,6 +2,7 @@ using FSO.Client;
 using FSO.Client.UI.Controls;
 using FSO.Client.UI.Framework;
 using FSO.Common.Rendering.Framework.Model;
+using Microsoft.Xna.Framework.Input;
 
 namespace Simitone.Client.UI.Utils
 {
@@ -18,6 +19,28 @@ namespace Simitone.Client.UI.Utils
         /// GetFocus() alone would block hotkeys for good after the cheat box was used once. Instead, the focused field
         /// and all its ancestors must be visible and still attached, up to the current screen.
         /// </summary>
+        private static bool LastButtons;
+
+        /// <summary>
+        /// Takes keyboard focus away from a text field when the player clicks anywhere outside it. UITextEdit takes focus
+        /// on mouse down but nothing ever gave it back, so after clicking the catalog search box the hotkeys stayed dead
+        /// until the box was hidden (switching mode). Call once per frame from the screen update.
+        /// </summary>
+        public static void ClearOnOutsideClick(UpdateState state)
+        {
+            var mouse = state.MouseState;
+            var down = mouse.LeftButton == ButtonState.Pressed || mouse.RightButton == ButtonState.Pressed;
+            var pressed = down && !LastButtons;
+            LastButtons = down;
+            if (!pressed) return;
+
+            var input = state.InputManager ?? GameFacade.Screens?.inputManager;
+            var focus = input?.GetFocus() as UITextEdit;
+            if (focus == null) return;
+            var local = focus.GetMousePosition(mouse);
+            if (local.X < 0 || local.Y < 0 || local.X >= focus.Width || local.Y >= focus.Height) input.SetFocus(null);
+        }
+
         public static bool IsTyping(UpdateState state)
         {
             var focus = (state?.InputManager ?? GameFacade.Screens?.inputManager)?.GetFocus() as UITextEdit;
