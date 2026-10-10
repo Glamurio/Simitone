@@ -42,6 +42,17 @@ namespace Simitone.Routing.Tests
                 Check(StartupArguments.Parse(new[] { "-dx", "-gl" }).UseDirectX == false, "gl after dx");
             });
 
+            yield return ("switches: -smoke options", () =>
+            {
+                var a = StartupArguments.Parse(new[] { "-smoke", "-smokeminutes=30", "-smokelots=21,x,22", "-smokeseed=7" });
+                Check(a.Smoke && a.SmokeMinutes == 30 && a.SmokeSeed == 7, "values");
+                Check(a.SmokeLots != null && a.SmokeLots.Length == 2 && a.SmokeLots[0] == 21 && a.SmokeLots[1] == 22, "lots");
+                Check(a.Ignored.Count == 0, "nothing ignored");
+                var bad = StartupArguments.Parse(new[] { "-smokeminutes=abc", "-smokelots=zz", "-smokefoo" });
+                Check(bad.Smoke && bad.SmokeMinutes == null && bad.SmokeLots == null && bad.Ignored.Count == 3, "malformed values are ignored, still a smoke run");
+                Check(!StartupArguments.Parse(new[] { "-3d" }).Smoke, "off by default");
+            });
+
             yield return ("switches: -path is left for PathArgument", () =>
             {
                 var a = StartupArguments.Parse(new[] { "-pathC:\\Sims", "-path=D:\\Sims" });

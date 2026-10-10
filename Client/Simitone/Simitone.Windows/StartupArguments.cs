@@ -18,6 +18,11 @@ namespace Simitone.Windows
         public bool? NoSound;
         public byte? Language;
         public int? RefreshRate;
+        /// <summary>-smoke: unattended crash test, see Simitone.Client.Utils.SmokeTest.</summary>
+        public bool Smoke;
+        public int? SmokeMinutes;
+        public int? SmokeSeed;
+        public int[] SmokeLots;
         /// <summary>Arguments that were not understood, for the start-up log.</summary>
         public List<string> Ignored = new List<string>();
 
@@ -30,7 +35,26 @@ namespace Simitone.Windows
                 if (string.IsNullOrEmpty(arg) || arg[0] != '-') { if (!string.IsNullOrEmpty(arg)) result.Ignored.Add(arg); continue; }
                 var cmd = arg.Substring(1);
                 if (cmd.StartsWith("path")) continue; //PathArgument
-                if (cmd.StartsWith("lang"))
+                if (cmd.StartsWith("smoke"))
+                {
+                    result.Smoke = true;
+                    var rest = cmd.Substring(5);
+                    if (rest.Length == 0) continue;
+                    var eq = rest.IndexOf('=');
+                    var key = eq < 0 ? rest : rest.Substring(0, eq);
+                    var val = eq < 0 ? "" : rest.Substring(eq + 1);
+                    if (key == "minutes" && int.TryParse(val, out var m) && m > 0) result.SmokeMinutes = m;
+                    else if (key == "seed" && int.TryParse(val, out var sd)) result.SmokeSeed = sd;
+                    else if (key == "lots")
+                    {
+                        var lots = new List<int>();
+                        foreach (var part in val.Split(',')) if (int.TryParse(part, out var l)) lots.Add(l);
+                        if (lots.Count > 0) result.SmokeLots = lots.ToArray();
+                        else result.Ignored.Add(arg);
+                    }
+                    else result.Ignored.Add(arg);
+                }
+                else if (cmd.StartsWith("lang"))
                 {
                     if (byte.TryParse(cmd.Substring(4), out var lang)) result.Language = lang; else result.Ignored.Add(arg);
                 }

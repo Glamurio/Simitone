@@ -49,8 +49,21 @@ namespace Simitone.Windows
 
             //the user folder must be set before anything reads GlobalSettings: with -lang or -hz, config.ini used to be
             //created next to the exe instead of in Documents/Simitone.
-            FSOEnvironment.UserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
+            var mainUserDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "Simitone/").Replace('\\', '/');
+            var smokeRun = StartupArguments.Parse(args).Smoke;
+            //-smoke works in its own folder (Documents/Simitone/smoke) with its own fresh copy of the game's saves, so the player's
+            //neighbourhoods are never touched; the player's settings are copied over so the test runs the way the game is set up.
+            FSOEnvironment.UserDir = smokeRun ? mainUserDir + "smoke/" : mainUserDir;
             Directory.CreateDirectory(FSOEnvironment.UserDir);
+            if (smokeRun)
+            {
+                try
+                {
+                    var ini = Path.Combine(mainUserDir, "simitone.ini");
+                    if (File.Exists(ini)) File.Copy(ini, Path.Combine(FSOEnvironment.UserDir, "simitone.ini"), true);
+                }
+                catch (Exception) { }
+            }
 
             //start-up options come from simitone.ini (Options > Settings); command line switches override them for this run.
             var startup = Simitone.Client.Utils.SimitoneSettings.Default;
@@ -106,6 +119,16 @@ namespace Simitone.Windows
                 else pathGiven = false; //-path with nothing after it: fall back to the settings/auto-detected folder
             }
             if (path != null) Simitone.Client.Utils.GameSourceInfo.Set(path, origin, GameInstall.IsLegacyCollection(path));
+
+            if (smokeRun && path != null)
+            {
+                var smoke = StartupArguments.Parse(args);
+                if (smoke.SmokeMinutes.HasValue) Simitone.Client.Utils.SmokeTest.Minutes = smoke.SmokeMinutes.Value;
+                if (smoke.SmokeSeed.HasValue) Simitone.Client.Utils.SmokeTest.Seed = smoke.SmokeSeed.Value;
+                Simitone.Client.Utils.SmokeTest.OnlyLots = smoke.SmokeLots;
+                FSOEnvironment.NoSound = true;
+                Simitone.Client.Utils.SmokeTest.Active = new Simitone.Client.Utils.SmokeTest();
+            }
 
             if (path == null || (pathGiven && !GameInstall.IsValid(path)))
             {
@@ -187,6 +210,12 @@ namespace Simitone.Windows
         private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
         {
             var exception = e.ExceptionObject;
+            if (Simitone.Client.Utils.SmokeTest.Active != null)
+            {
+                //unattended: record it where the harness can be read instead of waiting on a dialog.
+                Simitone.Client.Utils.SmokeTest.Active.OnCrash(e.ExceptionObject);
+                Environment.Exit(2);
+            }
             if (exception is OutOfMemoryException)
             {
                 MessageBox.Show(e.ExceptionObject.ToString(), "Out of Memory! FreeSO needs to close.");

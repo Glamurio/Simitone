@@ -245,6 +245,18 @@ namespace Simitone.Client.UI.Screens
             if (switcher != null) Remove(switcher);
         }
 
+        /// <summary>Smoke test (-smoke): leaves the current lot, if any, and loads the given one with its family, as if picked on the map.</summary>
+        public void SmokeLoad(short house)
+        {
+            CleanupLastWorld();
+            Downtown = false;
+            SavedLot = null;
+            if (TS1NeighPanel != null) Remove(TS1NeighPanel);
+            foreach (var switcher in Children.OfType<UINeighbourhoodSwitcher>().ToList()) Remove(switcher);
+            ActiveFamily = Content.Get().Neighborhood.GetFamilyForHouse(house);
+            InitializeLot(Content.Get().Neighborhood.GetHousePath(house), false);
+        }
+
         public void MoveInAndPlay(short house, int family, UIElement switcher)
         {
             MoveInFamily = null;
@@ -352,6 +364,8 @@ namespace Simitone.Client.UI.Screens
             
             Visible = World?.Visible != false && World?.State.Cameras.HideUI != true;
             GameFacade.Game.IsMouseVisible = Visible;
+
+            Simitone.Client.Utils.SmokeTest.Active?.Update(this, state);
 
             Simitone.Client.UI.Utils.UITextFocus.ClearOnOutsideClick(state);
             var typing = Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);

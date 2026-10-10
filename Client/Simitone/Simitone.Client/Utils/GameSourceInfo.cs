@@ -32,6 +32,12 @@ namespace Simitone.Client.Utils
             return " - " + InstallKind + " (" + Origin + ") - saves from: " + SaveCopySource();
         }
 
+        /// <summary>Install and save source as text, for reports.</summary>
+        public static string Describe()
+        {
+            return "Game folder: " + GamePath + " (" + InstallKind + ", chosen by " + Origin + ")\r\nSaves copied from: " + SaveCopySource();
+        }
+
         /// <summary>Writes simitone-startup.txt next to simitone.ini so the choice can be checked after the game closed.</summary>
         public static void WriteStartupLog()
         {
