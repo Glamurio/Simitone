@@ -327,7 +327,11 @@ namespace Simitone.Client
         protected override void Draw(GameTime gameTime)
         {
             //-smoke runs without rendering while a lot is simulated
-            if (Simitone.Client.Utils.SmokeTest.Active?.SkipDraw == true) return;
+            if (Simitone.Client.Utils.SmokeTest.Active?.SkipDraw == true)
+            {
+                GraphicsDevice.SetRenderTarget(null);
+                return;
+            }
             base.Draw(gameTime);
         }
 
@@ -352,6 +356,8 @@ namespace Simitone.Client
 
             base.Update(gameTime);
             GameThread.UpdateExecuting = false;
+            //nothing is drawn or presented while the smoke test simulates a lot (Present throws if a render target was left active)
+            if (Simitone.Client.Utils.SmokeTest.Active?.SkipDraw == true) SuppressDraw();
         }
     }
 }

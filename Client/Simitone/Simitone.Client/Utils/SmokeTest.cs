@@ -230,7 +230,8 @@ namespace Simitone.Client.Utils
             if (info.Title == "SimAntics Exception!")
             {
                 var text = (info.Message ?? "").Replace("\r\n", " ");
-                if (text.Length > 300) text = text.Substring(0, 300);
+                //the message ends with the SimAntics stack (object, BHAV and instruction), which is what is needed to find the cause
+                if (text.Length > 1500) text = text.Substring(0, 1500);
                 if (Current != null && !Current.Problems.Contains(text) && Current.Problems.Count < 40) Current.Problems.Add("exception dialog: " + text);
                 return;
             }
