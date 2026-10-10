@@ -156,6 +156,14 @@ namespace Simitone.Client.Utils
                 Get = () => Math.Max(0, Math.Min(3, S.PanSpeed)),
                 Set = (i) => { S.PanSpeed = i; S.Save(); }
             });
+            list.Add(new SimitoneSettingDef()
+            {
+                Section = CONTROLS, Label = "Keep mouse in the window",
+                Help = "Stops the mouse leaving the game (so edge scrolling works at every edge). Released when you switch to another program.",
+                Choices = new string[] { "Never", "Fullscreen only", "Always" },
+                Get = () => Math.Max(0, Math.Min(2, S.ConfineMouse)),
+                Set = (i) => { S.ConfineMouse = i; S.Save(); }
+            });
             list.Add(Toggle(CONTROLS, "Catalog search and wheel scrolling",
                 "Search box in the buy catalog; the mouse wheel scrolls the catalog when over it. Reopen the catalog to apply.",
                 () => S.CatalogSearch, (v) => { S.CatalogSearch = v; S.Save(); }, departure: true));

@@ -50,6 +50,7 @@ namespace Simitone.Client.Utils
             { "QueueNotices", "true" },
             { "CameraShortcuts", "true" },
             { "PanSpeed", "2" },
+            { "ConfineMouse", "1" },
             { "CatalogSearch", "true" },
             { "BuildUndo", "true" },
 
@@ -91,6 +92,8 @@ namespace Simitone.Client.Utils
         public bool CameraShortcuts { get; set; }
         /// <summary>Index into UICameraShortcuts.PanSpeeds.</summary>
         public int PanSpeed { get; set; }
+        /// <summary>0 never, 1 in fullscreen, 2 always: keep the mouse inside the window (Windows).</summary>
+        public int ConfineMouse { get; set; }
         public bool CatalogSearch { get; set; }
         public bool BuildUndo { get; set; }
 
