@@ -146,6 +146,9 @@ namespace Simitone.Client.UI.Panels
 
             vm.OnDialog += vm_OnDialog;
             vm.OnBreakpoint += Vm_OnBreakpoint;
+
+            //walls, floors, terrain and roof changes are recorded for undo while in buy/build mode.
+            BuildUndo.Attach(vm, () => !LiveMode && Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo);
         }
 
         public void SetupQuery()

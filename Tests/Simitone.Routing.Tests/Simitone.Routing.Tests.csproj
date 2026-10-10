@@ -16,6 +16,7 @@
   <ItemGroup>
     <Compile Include="..\..\Client\Simitone\Simitone.Windows\GameLocator\PathArgument.cs" Link="PathArgument.cs" />
     <Compile Include="..\..\Client\Simitone\Simitone.Client\UI\Utils\ZoomSteps.cs" Link="ZoomSteps.cs" />
+    <Compile Include="..\..\Client\Simitone\Simitone.Client\Utils\BuildUndoStack.cs" Link="BuildUndoStack.cs" />
   </ItemGroup>
 
   <ItemGroup>
