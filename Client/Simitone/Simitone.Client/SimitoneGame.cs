@@ -336,7 +336,7 @@ namespace Simitone.Client
                 GameFacade.Screens = uiLayer;
                 GameController.EnterLoading();
             }
-            if (++TitleTick % 120 == 0) //the save copy is only made once a neighbourhood is opened
+            if (++TitleTick % 120 == 0 && Simitone.Client.Utils.SmokeTest.Active == null) //the save copy is only made once a neighbourhood is opened
                 this.Window.Title = "Simitone" + Simitone.Client.Utils.GameSourceInfo.TitleSuffix();
             GameThread.UpdateExecuting = true;
 

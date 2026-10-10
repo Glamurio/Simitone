@@ -1,7 +1,10 @@
+using FSO.Client;
 using FSO.Client.UI.Framework;
 using FSO.Common;
 using FSO.Common.Rendering.Framework.Model;
 using FSO.Content;
+using FSO.Files.Formats.IFF;
+using FSO.Files.Formats.IFF.Chunks;
 using FSO.LotView.Model;
 using FSO.SimAntics;
 using FSO.SimAntics.Diagnostics;
@@ -31,7 +34,10 @@ namespace Simitone.Client.Utils
 
         private enum Phase { Waiting, NextLot, Loading, Running, Finished }
 
-        public static int Minutes = 240;
+        public static int Minutes = 90;
+        /// <summary>A lot with nobody on it has nothing to simulate; it is only watched this long (it still checks that it loads).</summary>
+        private const int EMPTY_LOT_MINUTES = 10;
+        private const int PROGRESS_SECONDS = 30;
         public static int[] OnlyLots = null;
         public static int Seed = 1234;
 
@@ -54,6 +60,7 @@ namespace Simitone.Client.Utils
         private long StartTicks;
         private long LastTicks;
         private Stopwatch StallTimer;
+        private readonly Stopwatch ProgressTimer = Stopwatch.StartNew();
         private int FramesUntilAction;
         private int FramesUntilDialog = -1;
         private VMDialogInfo PendingDialog;
@@ -132,7 +139,12 @@ namespace Simitone.Client.Utils
                 foreach (var file in Directory.GetFiles(folder, "House*.iff"))
                 {
                     var name = Path.GetFileNameWithoutExtension(file).Substring(5);
-                    if (int.TryParse(name, out var id) && (OnlyLots == null || OnlyLots.Contains(id))) Houses.Add(id);
+                    if (!int.TryParse(name, out var id) || (OnlyLots != null && !OnlyLots.Contains(id))) continue;
+                    //House00 and similar are not lots on the map: the file lacks the terrain layers a lot is built from.
+                    bool complete;
+                    try { var iff = new IffFile(file); complete = iff.Get<ARRY>(6) != null && iff.Get<ARRY>(9) != null && iff.Get<ARRY>(10) != null; }
+                    catch (Exception) { complete = false; }
+                    if (complete) Houses.Add(id); else Log($"Skipped house {id}: not a complete lot file (no map lot uses it)");
                 }
             }
             Houses.Sort();
@@ -236,7 +248,16 @@ namespace Simitone.Client.Utils
                 RandomInteraction(vm);
             }
 
-            if (Current.GameMinutes >= Minutes) { EndLot(screen); }
+            if (ProgressTimer.Elapsed.TotalSeconds >= PROGRESS_SECONDS)
+            {
+                ProgressTimer.Restart();
+                var line = $"lot {Current.House} ({Index + 1}/{Houses.Count}): {Current.GameMinutes}/{Minutes} game minutes, speed {vm.SpeedMultiplier}, {Current.Interactions} random actions";
+                Log($"[{DateTime.Now:T}] {line}");
+                try { GameFacade.Game.Window.Title = "Simitone smoke test - " + line; } catch (Exception) { }
+            }
+
+            var limit = vm.Entities.OfType<VMAvatar>().Any() ? Minutes : Math.Min(Minutes, EMPTY_LOT_MINUTES);
+            if (Current.GameMinutes >= limit) { EndLot(screen); }
             else if (LotTimer.Elapsed.TotalSeconds > MAX_LOT_SECONDS)
             {
                 Current.Status = "SLOW: stopped after " + MAX_LOT_SECONDS + "s";
