@@ -28,6 +28,7 @@
     .\build.cmd -Run                 # build, deploy, then start the game
     .\build.cmd -Configuration Debug # Debug build (better stack traces / debugger)
     .\build.cmd -Clean               # clean before building
+    .\build.cmd -Warnings            # also print compiler warnings (hidden by default)
     .\build.cmd -KeepFreeSO          # build the FreeSO checkout as it is, even if Simitone expects another commit
 #>
 [CmdletBinding()]
@@ -47,11 +48,16 @@ param(
     # Do not move the FreeSO submodule to the commit this Simitone revision expects.
     [switch]$KeepFreeSO,
     # Never prompt (used by CI).
-    [switch]$NonInteractive
+    [switch]$NonInteractive,
+    # Show compiler warnings (hundreds from old FreeSO code). By default only errors are printed.
+    [switch]$Warnings
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
+
+# MSBuild console output: errors only unless -Warnings was given.
+$Verbosity = if ($Warnings) { @('-v', 'minimal') } else { @('-v', 'quiet', '-clp:ErrorsOnly') }
 
 function Write-Step([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
@@ -159,17 +165,17 @@ Push-Location $RepoRoot
 try {
     if ($Clean) {
         Write-Step "dotnet clean ($Configuration)"
-        Invoke-Native dotnet @('clean', $Project, '-c', $Configuration, '-nologo', '-v', 'minimal')
+        Invoke-Native dotnet (@('clean', $Project, '-c', $Configuration, '-nologo') + $Verbosity)
         if ($LASTEXITCODE -ne 0) { Fail 'dotnet clean failed.' }
     }
     Write-Step "dotnet build ($Configuration) - the first build restores NuGet packages and takes a few minutes"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    Invoke-Native dotnet @('build', $Project, '-c', $Configuration, '-nologo', '-v', 'minimal')
+    Invoke-Native dotnet (@('build', $Project, '-c', $Configuration, '-nologo') + $Verbosity)
     if ($LASTEXITCODE -ne 0) { Fail 'dotnet build failed (see errors above).' }
     Write-Host ("    build finished in {0:N0}s" -f $sw.Elapsed.TotalSeconds)
     # The launcher is small and has no engine dependencies; it is deployed next to the game.
     Write-Step 'dotnet build Simitone Launcher'
-    Invoke-Native dotnet @('build', $LauncherProject, '-c', $Configuration, '-nologo', '-v', 'minimal')
+    Invoke-Native dotnet (@('build', $LauncherProject, '-c', $Configuration, '-nologo') + $Verbosity)
     if ($LASTEXITCODE -ne 0) { Fail 'dotnet build of the launcher failed (see errors above).' }
 }
 finally { Pop-Location }

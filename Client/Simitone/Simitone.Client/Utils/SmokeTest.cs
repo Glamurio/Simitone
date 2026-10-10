@@ -329,7 +329,7 @@ namespace Simitone.Client.Utils
         {
             var avatars = vm.Entities.OfType<VMAvatar>().Where(a => a.Position != LotTilePos.OUT_OF_WORLD && (a.Thread?.Queue?.Count ?? 0) == 0).ToList();
             if (avatars.Count == 0) return;
-            var objects = vm.Entities.OfType<VMGameObject>().Where(o => o.Position != LotTilePos.OUT_OF_WORLD && o.Disabled == 0 && !(o is VMAvatar)).ToList();
+            var objects = vm.Entities.OfType<VMGameObject>().Where(o => o.Position != LotTilePos.OUT_OF_WORLD && o.Disabled == 0).ToList();
             if (objects.Count == 0) return;
             var caller = avatars[Rand.Next(avatars.Count)];
             for (int attempt = 0; attempt < 6; attempt++)
