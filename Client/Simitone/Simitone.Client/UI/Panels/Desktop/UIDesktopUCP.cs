@@ -329,10 +329,10 @@ namespace Simitone.Client.UI.Panels.Desktop
             var nofocus = !Simitone.Client.UI.Utils.UITextFocus.IsTyping(state);
             if (Game.InLot && nofocus)
             {
-                if (keys.Contains(Keys.F1) && !LiveButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.LIVE);
-                if (keys.Contains(Keys.F2) && !BuyButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUY);
-                if (keys.Contains(Keys.F3) && !BuildButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUILD);
-                if (keys.Contains(Keys.F4)) OnModeClick?.Invoke(UIMainPanelMode.OPTIONS); // Options Panel
+                if (nofocus && keys.Contains(Keys.F1) && !LiveButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.LIVE);
+                if (nofocus && keys.Contains(Keys.F2) && !BuyButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUY);
+                if (nofocus && keys.Contains(Keys.F3) && !BuildButton.Disabled) OnModeClick?.Invoke(UIMainPanelMode.BUILD);
+                if (nofocus && keys.Contains(Keys.F4)) OnModeClick?.Invoke(UIMainPanelMode.OPTIONS); // Options Panel
 
                 if (nofocus)
                 {

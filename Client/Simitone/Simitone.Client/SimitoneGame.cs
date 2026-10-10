@@ -296,6 +296,8 @@ namespace Simitone.Client
             }
 
             FSO.Vitaboy.Avatar.setVitaboyEffect(vitaboyEffect);
+
+            WeatherSounds.Load("Content");
         }
 
         /// <summary>
@@ -306,6 +308,7 @@ namespace Simitone.Client
         {
             Simitone.Client.Utils.MouseConfine.Update(IntPtr.Zero, false);
             // TODO: Unload any non ContentManager content here
+            WeatherSounds.Unload();
         }
 
 

@@ -60,6 +60,15 @@ namespace Simitone.Client.UI.Screens
         public FAMI ActiveFamily;
         private ushort CurrentNeighborhoodMode = 4; // default to Normal/Old Town
 
+        // Weather effects state tracking
+        private float LastSoundIntensity = -1;
+        private WeatherType LastWeatherType = WeatherType.Rain;
+        private bool LastThunder = false;
+        private bool TerrainSnowApplied = false;
+        private float ThunderTimer = 0f;
+        private Random ThunderRandom = new Random();
+        private short? PendingWeatherData = null;
+
         public bool InLot
         {
             get
@@ -402,6 +411,9 @@ namespace Simitone.Client.UI.Screens
             }
             base.Update(state);
 
+            // Update weather effects (sounds and terrain) - upstream #67
+            UpdateWeatherEffects();
+
             if (!typing && InLot && Simitone.Client.Utils.SimitoneSettings.Default.CameraShortcuts)
                 CameraShortcuts.Update(state, World, LotControl);
             if (InLot && LotControl != null) UpdateBuildUndo(state, typing);
@@ -459,6 +471,86 @@ namespace Simitone.Client.UI.Screens
             //SaveHouseButton_OnButtonClick(null);
         }
 
+        private void UpdateWeatherEffects()
+        {
+            // Apply deferred weather state once Blueprint is available
+            if (PendingWeatherData.HasValue && vm?.Context?.Blueprint?.Weather != null)
+            {
+                vm.Context.Blueprint.Weather.SetWeather(PendingWeatherData.Value);
+                PendingWeatherData = null;
+            }
+
+            if (vm?.Context?.Blueprint?.Weather == null) return;
+
+            var weather = vm.Context.Blueprint.Weather;
+            var currentType = weather.WeatherType;
+            var currentThunder = weather.IsThunder;
+            var currentIntensity = weather.WeatherIntensity;
+
+            // Thunder timer runs every frame regardless of state changes
+            if (LastThunder && LastWeatherType == WeatherType.Rain && LastSoundIntensity > 0.1f && vm?.SpeedMultiplier > 0)
+            {
+                ThunderTimer -= 1f / 60f;
+                if (ThunderTimer <= 0)
+                {
+                    WeatherSounds.PlayThunder(LastSoundIntensity * 0.8f);
+                    ThunderTimer = 5f + (float)ThunderRandom.NextDouble() * 10f;
+                }
+            }
+
+            // Pause/resume rain sound to match game speed
+            // SpeedMultiplier is 0 when explicitly paused, -1 in build/buy/options mode
+            if (vm.SpeedMultiplier <= 0)
+                WeatherSounds.PauseRain();
+            else
+                WeatherSounds.ResumeRain();
+
+            bool stateChanged = currentType != LastWeatherType ||
+                              currentThunder != LastThunder ||
+                              Math.Abs(currentIntensity - LastSoundIntensity) > 0.05f;
+
+            if (!stateChanged) return;
+
+            if (currentType == WeatherType.Rain && currentIntensity > 0.1f)
+                WeatherSounds.PlayRain(currentIntensity);
+            else
+            {
+                WeatherSounds.StopRain();
+                ThunderTimer = 0f;
+            }
+
+            if (vm?.Context?.Blueprint?.Terrain != null)
+            {
+                if (currentType == WeatherType.Snow && currentIntensity > 0.1f)
+                {
+                    // if it's snowing, make the grass snowy
+                    if (!TerrainSnowApplied)
+                    {
+                        var terrain = vm.Context.Blueprint.Terrain;
+                        terrain.ForceSnow(0);
+                        terrain.UpdateLotType();
+                        terrain.TerrainDirty = true;
+                        TerrainSnowApplied = true;
+                    }
+                }
+                else
+                {   // remove it when it stops #TODO, don't do this on snow vacation lots
+                    if (TerrainSnowApplied)
+                    {
+                        var terrain = vm.Context.Blueprint.Terrain;
+                        terrain.ForceSnow(1);
+                        terrain.UpdateLotType();
+                        terrain.TerrainDirty = true;
+                        TerrainSnowApplied = false;
+                    }
+                }
+            }
+
+            LastWeatherType = currentType;
+            LastThunder = currentThunder;
+            LastSoundIntensity = currentIntensity;
+        }
+
         public override void PreDraw(UISpriteBatch batch)
         {
             base.PreDraw(batch);
@@ -474,6 +566,10 @@ namespace Simitone.Client.UI.Screens
             TimedReferenceController.Clear();
 
             if (ZoomLevel < 4) ZoomLevel = 5;
+            WeatherSounds.StopRain();
+            LastSoundIntensity = -1;
+            LastWeatherType = WeatherType.Rain;
+            LastThunder = false;
             vm.Context.Ambience.Kill();
             foreach (var ent in vm.Entities)
             { //stop object sounds
@@ -537,6 +633,13 @@ namespace Simitone.Client.UI.Screens
             vm = new VM(new VMContext(World), Driver, new UIHeadlineRendererProvider());
             vm.ListenBHAVChanges();
             vm.Init();
+
+            LastSoundIntensity = -1;
+            LastWeatherType = WeatherType.Rain;
+            LastThunder = false;
+            TerrainSnowApplied = false;
+            ThunderTimer = 0f;
+            PendingWeatherData = null;
 
             LotControl = new UILotControl(vm, World);
             this.AddAt(0, LotControl);
@@ -646,7 +749,18 @@ namespace Simitone.Client.UI.Screens
                     vm.TS1State.ActivateFamily(vm, ActiveFamily);
                 }
                 BlueprintReset(lotName, null);
-                
+                // Read saved weather state now; apply it deferred in UpdateWeatherEffects
+                // once Blueprint is available (BlueprintReset queues a command, so Blueprint
+                // may still be null when this line runs).
+                short pendingWeather = (short)(1 << 8);
+                var weatherPath = Path.Combine(FSOEnvironment.UserDir, "LocalHouse/cas.weather");
+                if (File.Exists(weatherPath))
+                {
+                    var bytes = File.ReadAllBytes(weatherPath);
+                    if (bytes.Length >= 2) pendingWeather = BitConverter.ToInt16(bytes, 0);
+                }
+                PendingWeatherData = pendingWeather;
+
                 if (vm.LoadErrors.Count > 0) GameThread.NextUpdate((state) => ShowLoadErrors(vm.LoadErrors, true));
 
                 vm.MyUID = 65537;
@@ -837,6 +951,8 @@ namespace Simitone.Client.UI.Screens
             {
                 marshal.SerializeInto(new BinaryWriter(output));
             }
+            var weatherData = vm.Context.Blueprint?.Weather?.WeatherData ?? (short)(1 << 8);
+            File.WriteAllBytes(Path.Combine(FSOEnvironment.UserDir, "LocalHouse/cas.weather"), BitConverter.GetBytes(weatherData));
         }
 
         private UIMobileAlert CloseAlert;
@@ -931,6 +1047,11 @@ namespace Simitone.Client.UI.Screens
 
             Content.Get().Neighborhood.SaveHouse(vm.GetGlobalValue(10), iff);
             Content.Get().Neighborhood.SaveNeighbourhood(true);
+
+            // Write weather sidecar alongside the save
+            var weatherData = vm.Context.Blueprint?.Weather?.WeatherData ?? (short)(1 << 8);
+            Directory.CreateDirectory(Path.Combine(FSOEnvironment.UserDir, "LocalHouse/"));
+            File.WriteAllBytes(Path.Combine(FSOEnvironment.UserDir, "LocalHouse/cas.weather"), BitConverter.GetBytes(weatherData));
         }
 
         public PNG GeneratePNG(Texture2D data)
