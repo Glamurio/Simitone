@@ -8,6 +8,7 @@ using FSO.SimAntics.Diagnostics;
 using FSO.SimAntics.Entities;
 using FSO.SimAntics.Model;
 using FSO.SimAntics.NetPlay.Model.Commands;
+using FSO.SimAntics.Primitives;
 using Simitone.Client.UI.Screens;
 using System;
 using System.Collections.Generic;
@@ -208,7 +209,7 @@ namespace Simitone.Client.Utils
                 if (type == VMDialogType.YesNo) code = (byte)Rand.Next(2);
                 else if (type == VMDialogType.YesNoCancel) code = (byte)Rand.Next(3);
                 PendingDialog = null;
-                vm.SendCommand(new VMNetDialogResponseCmd { ResponseCode = code, ResponseText = "Smoke" });
+                vm.SendCommand(new VMNetDialogResponseCmd { ResponseCode = code, ResponseText = type == VMDialogType.NumericEntry ? "1" : "Smoke" });
             }
 
             var ticks = vm.Context.Clock.Ticks;

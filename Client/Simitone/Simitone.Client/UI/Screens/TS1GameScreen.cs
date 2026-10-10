@@ -866,7 +866,7 @@ namespace Simitone.Client.UI.Screens
                     Buttons =
                     UIAlertButton.YesNoCancel(
                         (b) => { Save(); ExitLot(); CloseAlert.Close(); CloseAlert = null; },
-                        (b) => { ExitLot(); CloseAlert.Close(); CloseAlert = null; },
+                        (b) => { ExitLot(true); CloseAlert.Close(); CloseAlert = null; },
                         (b) => { CloseAlert.Close(); CloseAlert = null; }
                         )
                 });
@@ -933,9 +933,12 @@ namespace Simitone.Client.UI.Screens
             return png;
         }
 
-        public void ExitLot()
+        public void ExitLot(bool discardChanges = false)
         {
             CleanupLastWorld();
+            //riperiperi/Simitone#21: the family's budget, lot value and the people are changed in memory while playing, so leaving
+            //without saving has to reload them from disk, or the money spent still counts (and is saved with the next lot).
+            if (discardChanges && SimitoneSettings.Default.QoLFixes) Content.Get().Neighborhood.InitSpecific(0);
             NeighSelection(NeighSelectionMode.Normal);
             Downtown = false;
             SavedLot = null;
