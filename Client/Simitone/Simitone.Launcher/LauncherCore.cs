@@ -154,8 +154,8 @@ namespace Simitone.Launcher
             list.Add(Toggle(C, INTERFACE, "EdgeScroll", "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.", true));
             list.Add(Toggle(S, INTERFACE, "CameraShortcuts", "Camera shortcuts",
                 "Arrows or WASD pan, Q/E (or , and .) rotate, C centres, F follows the Sim, Backspace goes back, F5-F7 views (Ctrl saves).", true));
-            list.Add(Choice(S, INTERFACE, "PanSpeed", "Keyboard pan speed", "How fast the arrow keys and WASD move the camera.",
-                new[] { "Slow", "Normal", "Fast", "Very fast" }, Numbers(0, 4), "2"));
+            list.Add(Choice(S, INTERFACE, "PanningSpeed", "Panning speed", "How fast the arrow keys and WASD move the camera.",
+                new[] { "Slow", "Fast", "Very fast" }, Numbers(0, 3), "0"));
             list.Add(Toggle(S, INTERFACE, "SteppedZoom", "Stepped wheel zoom (2D)",
                 "The mouse wheel moves one view distance per notch, like the original game, instead of zooming smoothly.", true));
             list.Add(Choice(S, INTERFACE, "ConfineMouse", "Keep mouse in the window",

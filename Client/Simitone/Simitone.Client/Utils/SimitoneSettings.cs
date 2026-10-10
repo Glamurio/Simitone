@@ -49,7 +49,7 @@ namespace Simitone.Client.Utils
             //interface
             { "QueueNotices", "true" },
             { "CameraShortcuts", "true" },
-            { "PanSpeed", "2" },
+            { "PanningSpeed", "0" },
             { "SteppedZoom", "true" },
             { "ConfineMouse", "1" },
             { "CatalogSearch", "true" },
@@ -98,8 +98,8 @@ namespace Simitone.Client.Utils
 
         public bool QueueNotices { get; set; }
         public bool CameraShortcuts { get; set; }
-        /// <summary>Index into UICameraShortcuts.PanSpeeds.</summary>
-        public int PanSpeed { get; set; }
+        /// <summary>Index into UICameraShortcuts.PanSpeeds. (Replaces the old four-step "PanSpeed" key, whose indices meant different speeds.)</summary>
+        public int PanningSpeed { get; set; }
         /// <summary>2D mouse wheel zoom moves one view distance per notch (as in the original game) instead of smoothly.</summary>
         public bool SteppedZoom { get; set; }
         /// <summary>0 never, 1 in fullscreen, 2 always: keep the mouse inside the window (Windows).</summary>

@@ -62,6 +62,14 @@ namespace Simitone.Routing.Tests
                 Check(t.Constants[9] == 3 && t.Constants[0] == 30, "other tuning constants untouched");
             });
 
+            yield return ("fireplace ignition: the default checks once per 60 ticks (15 passes of 4 ticks) at the original 1 in 750 odds", () =>
+            {
+                var t = FireTuning();
+                Check(ContentHotfixes.FireIgnitionDivisor == 15, "default divisor is " + ContentHotfixes.FireIgnitionDivisor);
+                Check(ContentHotfixes.ReduceFireplaceIgnition(BurnSomething(), t, ContentHotfixes.FireIgnitionDivisor), "not patched");
+                Check(t.Constants[8] == 11250, "range is " + t.Constants[8]);
+            });
+
             yield return ("fireplace ignition: ignition stays possible (never scaled to zero or past the 16-bit signed range)", () =>
             {
                 Check(ContentHotfixes.ScaleIgnitionRange(750, 10) > 0, "positive");

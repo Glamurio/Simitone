@@ -30,13 +30,13 @@ namespace Simitone.Client.UI.Utils
             public float Zoom;
         }
 
-        /// <summary>Keyboard pan speed choices (SimitoneSettings.PanSpeed is the index). Edge scrolling is not affected.</summary>
-        public static readonly float[] PanSpeeds = new float[] { 0.75f, 1f, 1.5f, 2.25f };
+        /// <summary>Panning speed choices (SimitoneSettings.PanningSpeed is the index). Edge scrolling is not affected.</summary>
+        public static readonly float[] PanSpeeds = new float[] { 1.5f, 2.25f, 3.5f };
         private static float PanSpeedMultiplier
         {
             get
             {
-                var i = Simitone.Client.Utils.SimitoneSettings.Default.PanSpeed;
+                var i = Simitone.Client.Utils.SimitoneSettings.Default.PanningSpeed;
                 return PanSpeeds[System.Math.Max(0, System.Math.Min(PanSpeeds.Length - 1, i))];
             }
         }

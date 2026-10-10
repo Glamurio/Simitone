@@ -133,11 +133,11 @@ namespace Simitone.Client.Utils
                 () => S.CameraShortcuts, (v) => { S.CameraShortcuts = v; S.Save(); }, departure: true));
             list.Add(new SimitoneSettingDef()
             {
-                Section = CONTROLS, Label = "Keyboard pan speed",
+                Section = CONTROLS, Label = "Panning speed",
                 Help = "How fast the arrow keys and WASD move the camera.",
-                Choices = new string[] { "Slow", "Normal", "Fast", "Very fast" },
-                Get = () => Math.Max(0, Math.Min(3, S.PanSpeed)),
-                Set = (i) => { S.PanSpeed = i; S.Save(); }
+                Choices = new string[] { "Slow", "Fast", "Very fast" },
+                Get = () => Math.Max(0, Math.Min(2, S.PanningSpeed)),
+                Set = (i) => { S.PanningSpeed = i; S.Save(); }
             });
             list.Add(Toggle(CONTROLS, "Stepped wheel zoom (2D)",
                 "The mouse wheel moves one view distance per notch, like the original game, instead of zooming smoothly.",

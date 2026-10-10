@@ -68,6 +68,8 @@ namespace Simitone.Client.UI.Panels
 
             Notice = MakeLabel(15, UIStyle.Current.SecondaryText);
             Notice.Alignment = TextAlignment.Left | TextAlignment.Middle;
+            Notice.Wrapped = true; //long notices wrap inside their box instead of running on under the Close button
+            Notice.MaxLines = 3;
             Add(Notice);
 
             CloseButton = new UIBigButton(true);
@@ -120,7 +122,7 @@ namespace Simitone.Client.UI.Panels
             PageLabel.Position = new Vector2(ContentX + 150, footerY - 50);
             PageLabel.Size = new Vector2(ContentWidth - 300, 36);
             Notice.Position = new Vector2(ContentX, footerY + 10);
-            Notice.Size = new Vector2(ContentWidth - 300, 80);
+            Notice.Size = new Vector2(ContentWidth - 340, 80);
             CloseButton.Position = new Vector2(ContentX + ContentWidth - 275, footerY);
             Refresh();
         }
