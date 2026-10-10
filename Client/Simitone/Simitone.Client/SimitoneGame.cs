@@ -116,6 +116,7 @@ namespace Simitone.Client
                 else SetBackBufferSize(GlobalSettings.Default.GraphicsWidth, GlobalSettings.Default.GraphicsHeight, true);
             }
 
+            WindowActive = IsActive;
             var confine = Simitone.Client.Utils.SimitoneSettings.Default.ConfineMouse;
             Simitone.Client.Utils.MouseConfine.Update(Window.Handle, IsActive && (confine == 2 || (confine == 1 && full)));
         }
@@ -320,6 +321,8 @@ namespace Simitone.Client
         /// checking for collisions, gathering input, and playing audio.
         /// </summary>
         /// <param name="gameTime">Provides a snapshot of timing values.</param>
+        /// <summary>False while the window is in the background. Edge scrolling ignores the mouse then: it reports stale or off-window positions.</summary>
+        public static bool WindowActive = true;
         private int TitleTick;
         protected override void Update(GameTime gameTime)
         {

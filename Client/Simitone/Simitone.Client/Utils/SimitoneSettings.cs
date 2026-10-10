@@ -57,6 +57,7 @@ namespace Simitone.Client.Utils
 
             //debugging
             { "GamePath", "" },
+            { "QoLFixes", "true" },
             { "Diagnostics", "true" },
             { "DrawRoutes", "false" },
 
@@ -77,6 +78,12 @@ namespace Simitone.Client.Utils
             set { _DefaultValues = value; }
         }
 
+        /// <summary>
+        /// Master switch for every Simitone correction to the original simulation (all the individual fixes below, plus the
+        /// object data fixes). Shimmy stays separate because it changes how Sims move rather than fixing a fault.
+        /// The individual switches remain in simitone.ini for troubleshooting; they only count while this is on.
+        /// </summary>
+        public bool QoLFixes { get; set; }
         public bool Shimmy { get; set; }
         public bool RoutingFixes { get; set; }
         public bool QueueFixes { get; set; }
@@ -120,16 +127,17 @@ namespace Simitone.Client.Utils
         public void ApplyToEngine()
         {
             VMFeatures.Shimmy = Shimmy;
-            VMFeatures.RoutingFixes = RoutingFixes;
-            VMFeatures.QueueFixes = QueueFixes;
-            VMFeatures.DynamicObstacles = DynamicObstacles;
-            VMFeatures.Unstick = Unstick;
-            VMFeatures.ApproachPositions = ApproachPositions;
-            VMFeatures.ObjectSelection = ObjectSelection;
-            VMFeatures.AutonomyFixes = AutonomyFixes;
-            VMFeatures.AutonomyCountOnce = AutonomyCountOnce;
-            VMFeatures.QueueRecovery = QueueRecovery;
-            VMFeatures.Conversations = Conversations;
+            VMFeatures.RoutingFixes = QoLFixes && RoutingFixes;
+            VMFeatures.QueueFixes = QoLFixes && QueueFixes;
+            VMFeatures.DynamicObstacles = QoLFixes && DynamicObstacles;
+            VMFeatures.Unstick = QoLFixes && Unstick;
+            VMFeatures.ApproachPositions = QoLFixes && ApproachPositions;
+            VMFeatures.ObjectSelection = QoLFixes && ObjectSelection;
+            VMFeatures.AutonomyFixes = QoLFixes && AutonomyFixes;
+            VMFeatures.AutonomyCountOnce = QoLFixes && AutonomyCountOnce;
+            VMFeatures.QueueRecovery = QoLFixes && QueueRecovery;
+            VMFeatures.Conversations = QoLFixes && Conversations;
+            FSO.Content.ContentHotfixes.Enabled = QoLFixes; //read when objects load: takes effect for objects loaded afterwards
             VMFeatures.Diagnostics = Diagnostics;
             VMRoutingFrame.DEBUG_DRAW = DrawRoutes;
         }

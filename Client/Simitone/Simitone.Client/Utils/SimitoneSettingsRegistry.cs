@@ -111,36 +111,19 @@ namespace Simitone.Client.Utils
             list.Add(Toggle(SIMULATION, "Shimmy through narrow gaps",
                 "Sims side-step and pets squeeze between objects instead of failing to route.",
                 () => S.Shimmy, (v) => { S.Shimmy = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Routing fixes",
-                "Each destination gets its own wait time, failures blame the right object, next goals use doors.",
-                () => S.RoutingFixes, (v) => { S.RoutingFixes = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Action queue fixes",
-                "Queued actions for objects pets can use can be cancelled; fixes a freeze when queueing.",
-                () => S.QueueFixes, (v) => { S.QueueFixes = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Walk around standing Sims",
-                "Plan around Sims standing still, plan again when objects move, retry a blocked door once.",
-                () => S.DynamicObstacles, (v) => { S.DynamicObstacles = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Free stuck Sims",
-                "A Sim squeezed against an object steps out instead of failing every route.",
-                () => S.Unstick, (v) => { S.Unstick = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Smarter approach positions",
-                "Skip seats someone sits in; re-check the other spots when one fails.",
-                () => S.ApproachPositions, (v) => { S.ApproachPositions = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Avoid unreachable objects",
-                "When a task needs an object, prefer reachable ones that did not just fail.",
-                () => S.ObjectSelection, (v) => { S.ObjectSelection = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Free will fixes",
-                "Free will respects object cooldowns and avoids unreachable or failed objects.",
-                () => S.AutonomyFixes, (v) => { S.AutonomyFixes = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Free will: count each action once",
-                "Balance change: actions with several menu entries no longer get extra chances.",
-                () => S.AutonomyCountOnce, (v) => { S.AutonomyCountOnce = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Keep the queue when an object vanishes",
-                "Only the action on a deleted object is dropped, not the whole queue.",
-                () => S.QueueRecovery, (v) => { S.QueueRecovery = v; SaveS(); }, departure: true));
-            list.Add(Toggle(SIMULATION, "Respect conversations",
-                "Free will waits for chatting Sims instead of shooing them; follow Sims who walk off.",
-                () => S.Conversations, (v) => { S.Conversations = v; SaveS(); }, departure: true));
+            list.Add(Toggle(SIMULATION, "QoL fixes",
+                "All of Simitone's corrections to the original game in one switch: routing (own wait time per destination, doors, walking around standing Sims, freeing stuck Sims, smarter approach spots, avoiding unreachable objects), "
+                + "action queues (cancelling pet actions, no freeze, keeping the queue when an object vanishes), free will (respects cooldowns, avoids failed objects, counts each action once, respects conversations) "
+                + "and object data fixes (trash and dirt piles no longer multiply). Objects already loaded keep their old behaviour until the next lot.",
+                () => S.QoLFixes,
+                (v) =>
+                {
+                    S.QoLFixes = v;
+                    //turning it on re-enables every part, so an old simitone.ini with one part off cannot leave it half on.
+                    if (v) S.RoutingFixes = S.QueueFixes = S.DynamicObstacles = S.Unstick = S.ApproachPositions = S.ObjectSelection
+                        = S.AutonomyFixes = S.AutonomyCountOnce = S.QueueRecovery = S.Conversations = true;
+                    SaveS();
+                }, departure: true));
 
             //--- camera and controls
             list.Add(Toggle(CONTROLS, "Edge scrolling", "Scroll the lot when the mouse touches the screen edge.",

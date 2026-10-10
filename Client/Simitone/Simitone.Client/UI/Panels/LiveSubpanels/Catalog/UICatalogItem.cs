@@ -86,7 +86,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels.Catalog
                     IconCache[GUID] = null;
                     return null;
                 }
-                var bmp = obj.Resource.Get<BMP>(obj.OBJ.CatalogStringsID);
+                var bmp = obj.GetCatalogBmp();
                 if (bmp != null) IconCache[GUID] = bmp.GetTexture(GameFacade.GraphicsDevice);
                 else IconCache[GUID] = null;
             }

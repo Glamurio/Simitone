@@ -147,7 +147,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             var obj = Content.Get().WorldObjects.Get(item.GUID);
             if (obj != null)
             {
-                Item = obj.Resource.Get<BMP>(obj.OBJ.CatalogStringsID)?.GetTexture(GameFacade.GraphicsDevice);
+                Item = obj.GetCatalogBmp()?.GetTexture(GameFacade.GraphicsDevice);
                 NameLabel.Caption = obj.Resource.Get<CTSS>(obj.OBJ.CatalogStringsID)?.GetString(0) ?? obj.OBJ.ChunkLabel;
                 CountLabel.Caption = item.Count.ToString();
             }

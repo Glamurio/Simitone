@@ -168,7 +168,6 @@ namespace Simitone.Client.UI.Panels
         {
             private const int WIDTH = 440;
             private const int PAD = 10;
-            private const int LINE = 20;
             private readonly UILabel Text;
             private readonly Texture2D Px;
             private Vector2 BoxSize;
@@ -189,9 +188,10 @@ namespace Simitone.Client.UI.Panels
                 if (Text.Caption != text)
                 {
                     Text.Caption = text;
-                    var lines = UIUtils.WordWrap(text, WIDTH - PAD * 2, Text.CaptionStyle, int.MaxValue).Lines.Count;
-                    BoxSize = new Vector2(WIDTH, lines * LINE + PAD * 2);
-                    Text.Size = new Vector2(WIDTH - PAD * 2, lines * LINE);
+                    //The box is measured with the same wrapper and line height the label draws with, so it always fits the text.
+                    var wrap = UIUtils.WordWrap(text, WIDTH - PAD * 2, Text.CaptionStyle, int.MaxValue);
+                    BoxSize = new Vector2(WIDTH, wrap.Height + PAD * 2 + 4);
+                    Text.Size = new Vector2(WIDTH - PAD * 2, wrap.Height + 4);
                 }
                 var x = Math.Max(4, Math.Min(maxX - BoxSize.X - 4, mouse.X + 16));
                 var y = mouse.Y + 22;

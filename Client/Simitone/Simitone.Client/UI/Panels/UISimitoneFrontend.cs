@@ -32,8 +32,6 @@ namespace Simitone.Client.UI.Panels
         public UIModeSwitcher ModeSwitcher;
         public UIDesktopUCP DesktopUCP;
         public UICheatTextbox CheatTextbox;
-        public Simitone.Client.UI.Controls.UIFlatButton UndoBtn;
-        public Simitone.Client.UI.Controls.UIFlatButton RedoBtn;
 
         public bool PanelActive;
         public int LastCut = 0;
@@ -69,17 +67,6 @@ namespace Simitone.Client.UI.Panels
             CheatTextbox.Position = new Vector2(10, 10);
             CheatTextbox.Visible = false;
             Add(CheatTextbox);
-
-            UndoBtn = new Simitone.Client.UI.Controls.UIFlatButton("Undo", new Vector2(100, 36), 17);
-            UndoBtn.Position = new Vector2(15, 15); //docked above the main panel in Update
-            UndoBtn.OnClick += (b) => Game.RunUndo(false);
-            UndoBtn.Visible = false;
-            Add(UndoBtn);
-            RedoBtn = new Simitone.Client.UI.Controls.UIFlatButton("Redo", new Vector2(100, 36), 17);
-            RedoBtn.Position = new Vector2(123, 15);
-            RedoBtn.OnClick += (b) => Game.RunUndo(true);
-            RedoBtn.Visible = false;
-            Add(RedoBtn);
 
             MainPanel = new UIMainPanel(screen);
             MainPanel.OnEndSelect += OnEndSelect;
@@ -257,20 +244,6 @@ namespace Simitone.Client.UI.Panels
             }
 
             base.Update(state);
-
-            //Undo / Redo buttons in buy and build mode (Ctrl+Z / Ctrl+Y do the same).
-            var lot = Game.LotControl;
-            var showUndo = lot != null && !lot.LiveMode && Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo && !CheatTextbox.Visible;
-            //Docked on the main panel's top edge, so they sit with the buy/build tools rather than on the bare lot view.
-            showUndo = showUndo && MainPanel != null && MainPanel.Visible;
-            UndoBtn.Visible = RedoBtn.Visible = showUndo;
-            if (showUndo)
-            {
-                UndoBtn.Position = new Vector2(MainPanel.X + 6, MainPanel.Y - 44);
-                RedoBtn.Position = new Vector2(UndoBtn.X + UndoBtn.ButtonSize.X + 8, UndoBtn.Y);
-                UndoBtn.Disabled = !lot.BuildUndo.CanUndo;
-                RedoBtn.Disabled = !lot.BuildUndo.CanRedo;
-            }
 
             if (!Game.Desktop)
             {

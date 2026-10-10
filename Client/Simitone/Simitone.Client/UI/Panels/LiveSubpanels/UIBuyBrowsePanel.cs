@@ -335,6 +335,11 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
         private UILabel SearchLabel;
         private bool Searching;
         private bool ClearingSearch;
+        //Undo / Redo icon buttons sit under the search box (Buy) or in their own small column (Build).
+        private const int UNDO_WIDTH = 90;
+        private UIStencilButton UndoBtn, RedoBtn;
+        private bool UndoEnabled => Simitone.Client.Utils.SimitoneSettings.Default.BuildUndo && !FSO.Common.FSOEnvironment.SoftwareKeyboard;
+        private int SideWidth => SearchBox != null ? SEARCH_WIDTH : (UndoBtn != null ? UNDO_WIDTH : 0);
         private bool SearchEnabled => Mode != UICatalogMode.Build && Simitone.Client.Utils.SimitoneSettings.Default.CatalogSearch
             && !FSO.Common.FSOEnvironment.SoftwareKeyboard;
 
@@ -351,6 +356,7 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             Add(CatContainer);
             Mode = mode;
             if (SearchEnabled) InitSearch();
+            if (UndoEnabled) InitUndo();
             GameResized();
 
             InitCategory(category, false);
@@ -796,14 +802,32 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
         public override void GameResized()
         {
             base.GameResized();
-            var searchWidth = (SearchBox != null) ? SEARCH_WIDTH : 0;
-            CatContainer.Size = new Vector2(Size.X - searchWidth, 128);
+            CatContainer.Size = new Vector2(Size.X - SideWidth, 128);
             if (SearchBox != null)
             {
                 SearchLabel.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 26);
                 SearchBox.Position = new Vector2(Size.X - SEARCH_WIDTH + 10, 50);
             }
+            if (UndoBtn != null)
+            {
+                var x = Size.X - SideWidth + 10;
+                var y = SearchBox != null ? 90 : 50;
+                UndoBtn.Position = new Vector2(x, y);
+                RedoBtn.Position = new Vector2(x + 34, y);
+            }
             if (ChoosingSub) Reset();
+        }
+
+        private void InitUndo()
+        {
+            var ui = FSO.Content.Content.Get().CustomUI;
+            var gd = GameFacade.GraphicsDevice;
+            UndoBtn = new UIStencilButton(ui.Get("btn_undo.png").Get(gd)) { Tooltip = "Undo (Ctrl+Z)" };
+            RedoBtn = new UIStencilButton(ui.Get("btn_redo.png").Get(gd)) { Tooltip = "Redo (Ctrl+Y)" };
+            UndoBtn.OnButtonClick += (b) => Game.RunUndo(false);
+            RedoBtn.OnButtonClick += (b) => Game.RunUndo(true);
+            Add(UndoBtn);
+            Add(RedoBtn);
         }
 
         private void InitSearch()
@@ -866,6 +890,12 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
         public override void Update(UpdateState state)
         {
             Invalidate();
+            if (UndoBtn != null)
+            {
+                var history = Game.LotControl?.BuildUndo;
+                UndoBtn.Disabled = history == null || !history.CanUndo;
+                RedoBtn.Disabled = history == null || !history.CanRedo;
+            }
             var first = SelButtons.FirstOrDefault();
             if (first != null && first.Opacity == 0)
             {

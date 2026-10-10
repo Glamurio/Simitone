@@ -864,7 +864,7 @@ namespace Simitone.Client.UI.Panels
                     }
                     else
                     {
-                        if (!scrolled && GlobalSettings.Default.EdgeScroll && !state.TouchMode) scrolled = World.TestScroll(state);
+                        if (!scrolled && GlobalSettings.Default.EdgeScroll && !state.TouchMode && SimitoneGame.WindowActive) scrolled = World.TestScroll(state);
                     }
                 }
 

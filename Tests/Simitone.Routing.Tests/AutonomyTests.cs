@@ -25,6 +25,15 @@ namespace Simitone.Routing.Tests
                 Check(!FSO.SimAntics.VMEntity.IsOffLotPosition(new FSO.LotView.Model.LotTilePos(40, 40, 1)), "in-world tile is on lot");
             });
 
+            yield return ("catalog picture: exact id wins, a lone catalog-range BMP is the fallback", () =>
+            {
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2000, 2001 }) == 2000, "exact id");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2001 }) == 2001, "ChairDiningAOL: strings 2000, picture 2001");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2003 }) == 2003, "SofaLoveSeatAOL: strings 2000, picture 2003");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 2001, 2002 }) == -1, "ambiguous: no guess");
+                Check(FSO.Content.GameObject.PickCatalogBmpId(2000, new[] { 4000, 6000 }) == -1, "only non-catalog pictures");
+            });
+
             yield return ("lockout filter off: nothing is skipped", () =>
             {
                 Check(!VMFindBestAction.SkipForLockout(false, false, 500), "locked object kept when filter off");
