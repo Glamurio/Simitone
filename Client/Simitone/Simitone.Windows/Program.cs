@@ -147,6 +147,7 @@ namespace Simitone.Windows
                 if (smoke.SmokeSeed.HasValue) Simitone.Client.Utils.SmokeTest.Seed = smoke.SmokeSeed.Value;
                 Simitone.Client.Utils.SmokeTest.OnlyLots = smoke.SmokeLots;
                 Simitone.Client.Utils.SmokeTest.Headless = !smoke.SmokeVisual;
+                Simitone.Client.Utils.SmokeTest.IncludeEmptyLots = smoke.SmokeAll;
                 FSOEnvironment.NoSound = true;
                 Simitone.Client.Utils.SmokeTest.Active = new Simitone.Client.Utils.SmokeTest();
             }

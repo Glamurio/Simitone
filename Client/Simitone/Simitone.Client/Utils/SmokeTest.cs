@@ -45,6 +45,11 @@ namespace Simitone.Client.Utils
         /// real-time pacing). -smokevisual turns this off to watch the game play at normal speed 10.
         /// </summary>
         public static bool Headless = true;
+        /// <summary>
+        /// Lots nobody lives on run without a simulation (speed -1, the game only lets you build there), so by default they are not
+        /// loaded at all: there is nothing to play and each load costs several seconds. -smokeall loads them too, as a load-only check.
+        /// </summary>
+        public static bool IncludeEmptyLots = false;
         private const int TICK_BUDGET_MS = 40;
         private const int MAX_LOT_SECONDS_HEADLESS = 240;
 
@@ -81,7 +86,8 @@ namespace Simitone.Client.Utils
             public int House;
             public string Family;
             public string Status = "OK";
-            public double Seconds;
+            public double Seconds, LoadSeconds;
+            public bool NoSimulation;
             public long GameMinutes;
             public int Avatars, Objects, LoadErrors, Interactions, Dialogs;
             public long MemoryMB;
@@ -144,6 +150,7 @@ namespace Simitone.Client.Utils
             var neigh = Content.Get().Neighborhood;
             var folder = Path.GetDirectoryName(neigh.GetHousePath(1));
             Houses = new List<int>();
+            int skippedEmpty = 0;
             if (Directory.Exists(folder))
             {
                 foreach (var file in Directory.GetFiles(folder, "House*.iff"))
@@ -154,11 +161,14 @@ namespace Simitone.Client.Utils
                     bool complete;
                     try { var iff = new IffFile(file); complete = iff.Get<ARRY>(6) != null && iff.Get<ARRY>(9) != null && iff.Get<ARRY>(10) != null; }
                     catch (Exception) { complete = false; }
+                    if (complete && !IncludeEmptyLots && Content.Get().Neighborhood.GetFamilyForHouse((short)id) == null) { skippedEmpty++; continue; }
                     if (complete) Houses.Add(id); else Log($"Skipped house {id}: not a complete lot file (no map lot uses it)");
                 }
             }
             Houses.Sort();
-            Log($"Found {Houses.Count} lot(s) in {folder}: {string.Join(", ", Houses)}\r\n");
+            Log($"Found {Houses.Count} lot(s) with a family in {folder}: {string.Join(", ", Houses)}");
+            if (skippedEmpty > 0) Log($"{skippedEmpty} empty lot(s) skipped (no family, so no simulation; -smokeall loads them as well)");
+            Log("");
             State = Phase.NextLot;
         }
 
@@ -190,6 +200,17 @@ namespace Simitone.Client.Utils
                     Current.Problems.Add($"lot did not become ready within {LOAD_TIMEOUT_SECONDS}s");
                     EndLot(screen);
                 }
+                return;
+            }
+            Current.LoadSeconds = LotTimer.Elapsed.TotalSeconds;
+            if (screen.ActiveFamily == null)
+            {
+                //simless lot: the game keeps it at speed -1, the clock never runs, so only the load is checked
+                Current.NoSimulation = true;
+                Current.Problems.Add("no family: loaded, nothing to simulate");
+                Current.LoadErrors = vm.LoadErrors.Count;
+                foreach (var error in vm.LoadErrors.Take(20)) Current.Problems.Add("load error: " + error);
+                EndLot(screen);
                 return;
             }
             vm.OnDialog += OnDialog;
@@ -321,6 +342,7 @@ namespace Simitone.Client.Utils
                 if (Hooked) vm.OnDialog -= OnDialog;
             }
             if (Current.Exceptions.Count > 0 && Current.Status == "OK") Current.Status = "EXCEPTIONS";
+            if (Current.LoadErrors > 0 && Current.Status == "OK") Current.Status = "LOAD ERRORS";
             Current.Seconds = LotTimer.Elapsed.TotalSeconds;
             GC.Collect();
             Current.MemoryMB = Process.GetCurrentProcess().WorkingSet64 / (1024 * 1024);
@@ -334,7 +356,7 @@ namespace Simitone.Client.Utils
         {
             var sb = new StringBuilder();
             sb.AppendLine($"lot {r.House} ({r.Family}): {r.Status}");
-            sb.AppendLine($"    {r.GameMinutes} game minutes in {r.Seconds:F0}s, {r.Avatars} avatars, {r.Objects} objects, {r.Interactions} random interactions, {r.Dialogs} dialogs answered, memory {r.MemoryMB} MB");
+            sb.AppendLine($"    loaded in {r.LoadSeconds:F1}s; {r.GameMinutes} game minutes, {r.Seconds:F0}s total, {r.Avatars} avatars, {r.Objects} objects, {r.Interactions} random interactions, {r.Dialogs} dialogs answered, memory {r.MemoryMB} MB");
             if (r.LoadErrors > 0) sb.AppendLine($"    {r.LoadErrors} load error(s)");
             if (r.RouteHardFails > 0) sb.AppendLine($"    {r.RouteHardFails} failed route(s) (not an error by itself)");
             foreach (var e in r.Exceptions.OrderByDescending(x => x.Value)) sb.AppendLine($"    EXCEPTION x{e.Value}: {e.Key}");

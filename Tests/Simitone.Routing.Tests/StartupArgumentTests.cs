@@ -53,6 +53,7 @@ namespace Simitone.Routing.Tests
                 Check(!StartupArguments.Parse(new[] { "-3d" }).Smoke, "off by default");
                 var visual = StartupArguments.Parse(new[] { "-smokevisual" });
                 Check(!a.SmokeVisual && visual.Smoke && visual.SmokeVisual && visual.Ignored.Count == 0, "headless unless -smokevisual");
+                Check(StartupArguments.Parse(new[] { "-smokeall" }).SmokeAll && !a.SmokeAll, "-smokeall");
             });
 
             yield return ("switches: -path is left for PathArgument", () =>
