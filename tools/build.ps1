@@ -81,6 +81,14 @@ if (-not (Test-Path $FreeSOMarker)) {
     if ($LASTEXITCODE -ne 0) { Fail 'git submodule update failed.' }
     if (-not (Test-Path $FreeSOMarker)) { Fail 'FreeSO submodule still missing after init.' }
 } elseif (Get-Command git -ErrorAction SilentlyContinue) {
+    # git pull / checkout then move FreeSO along as well, so "git submodule update" is not needed by hand.
+    Invoke-Native git @('-C', $RepoRoot, 'config', 'submodule.recurse', 'true') | Out-Null
+    # The MonoGame build rewrites this tracked file (Version 0.0.0.0 -> 3.7.0.0). It is harmless, but it made FreeSO look
+    # modified, which stopped the update below. Put the committed version back before looking at FreeSO's state.
+    $generated = Join-Path $RepoRoot 'FreeSO\Other\libs\FSOMonoGame\IDE\VisualStudioForMac\Properties\AddinInfo.cs'
+    if (Test-Path $generated) {
+        Invoke-Native git @('-C', (Split-Path -Parent (Split-Path -Parent $generated)), 'checkout', '--', 'Properties/AddinInfo.cs') | Out-Null
+    }
     # After pulling a Simitone branch that moved the submodule, FreeSO is still at the old commit and the build
     # fails on missing engine code. Move it along, unless that could lose or hide local FreeSO work.
     $status = (Invoke-Native git @('-C', $RepoRoot, 'submodule', 'status', 'FreeSO') | Out-String).Trim()
