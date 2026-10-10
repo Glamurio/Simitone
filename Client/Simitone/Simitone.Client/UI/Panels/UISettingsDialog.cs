@@ -1,6 +1,11 @@
 using FSO.Client;
 using FSO.Client.UI.Controls;
 using FSO.Client.UI.Framework;
+using FSO.Client.Utils;
+using FSO.Common.Rendering.Framework.Model;
+using FSO.Common.Utils;
+using FSO.Client.UI.Model;
+using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework;
 using Simitone.Client.UI.Controls;
 using Simitone.Client.UI.Model;
@@ -32,6 +37,10 @@ namespace Simitone.Client.UI.Panels
         private UILabel Notice;
         private UIBigButton CloseButton;
         private bool RestartPending;
+
+        //descriptions are shown in a popup while hovering a row, so they are not cut off to fit beside the controls.
+        private readonly List<KeyValuePair<Rectangle, Func<string>>> HelpAreas = new List<KeyValuePair<Rectangle, Func<string>>>();
+        private readonly HelpPopup Popup = new HelpPopup();
 
         private int ContentWidth => Math.Min(Width - 80, 960);
         private int ContentX => (Width - ContentWidth) / 2;
@@ -66,6 +75,7 @@ namespace Simitone.Client.UI.Panels
             CloseButton.Width = 275;
             CloseButton.OnButtonClick += (b) => Close();
             Add(CloseButton);
+            Add(Popup); //last: drawn over everything else
 
             SetHeight(Math.Min(ScrHeight - 20, 720));
             Layout();
@@ -118,6 +128,7 @@ namespace Simitone.Client.UI.Panels
         private void Refresh()
         {
             foreach (var child in Rows.GetChildren().ToList()) Rows.Remove(child);
+            HelpAreas.Clear();
             var items = Settings.Where(x => x.Section == Section).ToList();
             var pages = Math.Max(1, (items.Count + RowsPerPage - 1) / RowsPerPage);
             Page = Math.Max(0, Math.Min(pages - 1, Page));
@@ -136,7 +147,66 @@ namespace Simitone.Client.UI.Panels
             PageLabel.Caption = (pages > 1) ? $"Page {Page + 1} of {pages}" : "";
             Notice.Caption = RestartPending
                 ? "Restart Simitone for the changes marked (restart) to take effect."
-                : "Changes are saved immediately.";
+                : "Changes are saved immediately. Hover a setting to read what it does.";
+        }
+
+        public override void Update(UpdateState state)
+        {
+            base.Update(state);
+            var mouse = GetMousePosition(state.MouseState);
+            var point = new Point((int)mouse.X, (int)mouse.Y);
+            string text = null;
+            foreach (var area in HelpAreas)
+            {
+                if (area.Key.Contains(point)) { text = area.Value(); break; }
+            }
+            Popup.Show(text, mouse, Width, Height);
+        }
+
+        /// <summary>A word-wrapped box that follows the mouse, shown while a setting row is hovered.</summary>
+        private class HelpPopup : UIContainer
+        {
+            private const int WIDTH = 440;
+            private const int PAD = 10;
+            private const int LINE = 20;
+            private readonly UILabel Text;
+            private readonly Texture2D Px;
+            private Vector2 BoxSize;
+
+            public HelpPopup()
+            {
+                Px = TextureGenerator.GetPxWhite(GameFacade.GraphicsDevice);
+                Text = MakeLabel(15, UIStyle.Current.Text);
+                Text.Wrapped = true;
+                Text.Position = new Vector2(PAD, PAD);
+                Add(Text);
+                Visible = false;
+            }
+
+            public void Show(string text, Vector2 mouse, int maxX, int maxY)
+            {
+                if (string.IsNullOrEmpty(text)) { Visible = false; return; }
+                if (Text.Caption != text)
+                {
+                    Text.Caption = text;
+                    var lines = UIUtils.WordWrap(text, WIDTH - PAD * 2, Text.CaptionStyle, int.MaxValue).Lines.Count;
+                    BoxSize = new Vector2(WIDTH, lines * LINE + PAD * 2);
+                    Text.Size = new Vector2(WIDTH - PAD * 2, lines * LINE);
+                }
+                var x = Math.Max(4, Math.Min(maxX - BoxSize.X - 4, mouse.X + 16));
+                var y = mouse.Y + 22;
+                if (y + BoxSize.Y > maxY - 4) y = mouse.Y - BoxSize.Y - 8;
+                Position = new Vector2(x, Math.Max(4, y));
+                Visible = true;
+            }
+
+            public override void Draw(UISpriteBatch batch)
+            {
+                if (!Visible) return;
+                DrawLocalTexture(batch, Px, null, Vector2.Zero, BoxSize, Color.White * 0.5f);
+                DrawLocalTexture(batch, Px, null, new Vector2(1, 1), BoxSize - new Vector2(2, 2), Color.Black * 0.95f);
+                base.Draw(batch);
+            }
         }
 
         private void AddRow(SimitoneSettingDef item, int y)
@@ -146,11 +216,10 @@ namespace Simitone.Client.UI.Panels
             name.Position = new Vector2(ContentX, y);
             Rows.Add(name);
 
-            var help = MakeLabel(13, Color.White * 0.65f);
-            var helpText = (item.Departure ? "Simitone change. " : "") + (item.Help ?? "");
-            help.Caption = help.CaptionStyle.TruncateToWidth(helpText, ContentWidth - 330);
-            help.Position = new Vector2(ContentX, y + 25);
-            Rows.Add(help);
+            name.Position = new Vector2(ContentX, y + 8);
+            Func<string> helpText = () => (item.Departure ? "Simitone change: differs from the original game.\n" : "")
+                + ((item.HelpState != null ? item.HelpState() : item.Help) ?? "");
+            HelpAreas.Add(new KeyValuePair<Rectangle, Func<string>>(new Rectangle(ContentX, y - 4, ContentWidth, ROW_HEIGHT - 6), helpText));
 
             var right = ContentX + ContentWidth;
             if (item.Action != null)

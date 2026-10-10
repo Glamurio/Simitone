@@ -15,7 +15,8 @@ namespace Simitone.Routing.Tests
             var tests = ShimmyPlannerTests.All()
                 .Concat(DiagnosticsTests.All())
                 .Concat(SelectionTests.All())
-                .Concat(AutonomyTests.All());
+                .Concat(AutonomyTests.All())
+                .Concat(PathArgumentTests.All());
             foreach (var (name, test) in tests)
             {
                 total++;

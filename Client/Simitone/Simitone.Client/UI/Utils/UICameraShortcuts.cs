@@ -12,7 +12,8 @@ namespace Simitone.Client.UI.Utils
     /// <summary>
     /// Keyboard camera shortcuts for live, buy and build mode (roadmap 13). Simitone had no keyboard panning and centred
     /// on the selected Sim only once per lot load; switching Sims already recentres (VMNetChangeControlCmd).
-    ///   Arrow keys      pan (stops following)
+    ///   Arrow keys, WASD  pan (stops following)
+    ///   Q, E            rotate the camera (also , and .)
     ///   C               centre on the selected Sim
     ///   F               follow the selected Sim (toggle; any scrolling stops it)
     ///   Backspace       back to where the camera was before the last jump
@@ -29,6 +30,17 @@ namespace Simitone.Client.UI.Utils
             public float Zoom;
         }
 
+        /// <summary>Keyboard pan speed choices (SimitoneSettings.PanSpeed is the index). Edge scrolling is not affected.</summary>
+        public static readonly float[] PanSpeeds = new float[] { 0.75f, 1f, 1.5f, 2.25f };
+        private static float PanSpeedMultiplier
+        {
+            get
+            {
+                var i = Simitone.Client.Utils.SimitoneSettings.Default.PanSpeed;
+                return PanSpeeds[System.Math.Max(0, System.Math.Min(PanSpeeds.Length - 1, i))];
+            }
+        }
+
         private static readonly Keys[] BookmarkKeys = new Keys[] { Keys.F5, Keys.F6, Keys.F7 };
         private View?[] Bookmarks = new View?[BookmarkKeys.Length];
         private View? Previous;
@@ -42,19 +54,18 @@ namespace Simitone.Client.UI.Utils
             var sim = lotControl.ActiveEntity as VMAvatar;
             var simUI = sim?.WorldUI as AvatarComponent;
 
-            //arrow key panning, at the same speed as edge scrolling.
+            //arrow key / WASD panning. The direction is normalised on screen, so diagonals are not faster than straight lines.
             var kb = state.KeyboardState;
             var dir = Vector2.Zero;
-            if (kb.IsKeyDown(Keys.Up)) dir.Y -= 1;
-            if (kb.IsKeyDown(Keys.Down)) dir.Y += 1;
-            if (kb.IsKeyDown(Keys.Left)) dir.X -= 1;
-            if (kb.IsKeyDown(Keys.Right)) dir.X += 1;
+            var wasd = !state.CtrlDown && !state.AltDown; //Ctrl+S, Ctrl+A etc. belong to other features
+            if (kb.IsKeyDown(Keys.Up) || (wasd && kb.IsKeyDown(Keys.W))) dir.Y -= 1;
+            if (kb.IsKeyDown(Keys.Down) || (wasd && kb.IsKeyDown(Keys.S))) dir.Y += 1;
+            if (kb.IsKeyDown(Keys.Left) || (wasd && kb.IsKeyDown(Keys.A))) dir.X -= 1;
+            if (kb.IsKeyDown(Keys.Right) || (wasd && kb.IsKeyDown(Keys.D))) dir.X += 1;
             if (dir != Vector2.Zero)
             {
-                var basis = world.GetScrollBasis(true);
-                var move = dir.X * basis[0] + dir.Y * basis[1];
-                if (dir.X != 0 && dir.Y != 0) move *= new Vector2(1, 0.5f);
-                ws.CenterTile += move * 0.0625f * (60f / FSOEnvironment.RefreshRate);
+                var move = world.ScreenToScroll(dir);
+                ws.CenterTile += move * 0.0625f * PanSpeedMultiplier * (60f / FSOEnvironment.RefreshRate);
                 ws.ScrollAnchor = null;
             }
 
