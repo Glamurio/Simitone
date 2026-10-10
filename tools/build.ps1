@@ -56,8 +56,8 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 
-# MSBuild console output: errors only unless -Warnings was given.
-$Verbosity = if ($Warnings) { @('-v', 'minimal') } else { @('-v', 'quiet', '-clp:ErrorsOnly') }
+# MSBuild console output: errors only unless -Warnings was given. (-tl:off: the .NET 9 terminal logger ignores -clp.)
+$Verbosity = if ($Warnings) { @('-tl:off', '-v', 'minimal') } else { @('-tl:off', '-v', 'quiet', '-clp:ErrorsOnly') }
 
 function Write-Step([string]$msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 function Fail([string]$msg) { Write-Host "ERROR: $msg" -ForegroundColor Red; exit 1 }
