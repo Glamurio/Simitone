@@ -122,15 +122,6 @@ namespace Simitone.Windows
             }
             if (path != null) Simitone.Client.Utils.GameSourceInfo.Set(path, origin, GameInstall.IsLegacyCollection(path));
 
-            if (smokeRun && path != null)
-            {
-                var smoke = StartupArguments.Parse(args);
-                if (smoke.SmokeMinutes.HasValue) Simitone.Client.Utils.SmokeTest.Minutes = smoke.SmokeMinutes.Value;
-                if (smoke.SmokeSeed.HasValue) Simitone.Client.Utils.SmokeTest.Seed = smoke.SmokeSeed.Value;
-                Simitone.Client.Utils.SmokeTest.OnlyLots = smoke.SmokeLots;
-                FSOEnvironment.NoSound = true;
-                Simitone.Client.Utils.SmokeTest.Active = new Simitone.Client.Utils.SmokeTest();
-            }
 
             if (path == null || (pathGiven && !GameInstall.IsValid(path)))
             {
@@ -147,6 +138,17 @@ namespace Simitone.Windows
             FSO.Content.TS1.TS1NeighborhoodProvider.SaveImportRoots = GameInstall.SaveRoots(path);
 
             useDX = MonogameLinker.Link(useDX);
+
+            //created only after MonogameLinker has registered where MonoGame.Framework.dll lives: the harness touches MonoGame types.
+            if (smokeRun && path != null)
+            {
+                var smoke = StartupArguments.Parse(args);
+                if (smoke.SmokeMinutes.HasValue) Simitone.Client.Utils.SmokeTest.Minutes = smoke.SmokeMinutes.Value;
+                if (smoke.SmokeSeed.HasValue) Simitone.Client.Utils.SmokeTest.Seed = smoke.SmokeSeed.Value;
+                Simitone.Client.Utils.SmokeTest.OnlyLots = smoke.SmokeLots;
+                FSOEnvironment.NoSound = true;
+                Simitone.Client.Utils.SmokeTest.Active = new Simitone.Client.Utils.SmokeTest();
+            }
 
             FSO.Files.ImageLoaderHelpers.BitmapFunction = BitmapReader;
 
