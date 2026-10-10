@@ -92,6 +92,32 @@ namespace Simitone.Client.UI.Panels.LiveSubpanels
             var rel = n.Relationships;
 
             var rItems = rel.Select(x => new Tuple<int,int>(neighbour, x.Key)).ToList();
+            //Simitone's tabs, using the game's own definitions:
+            // Friends: mutual daily relationship of at least the "friendship threshold" (Sims.exe 0x4EA17E sets the
+            //          panel's friend flag this way; the threshold is Global.iff FCNS 2, 50).
+            // Family:  the same family number (person data 61).
+            // Fame:    a star power level (person data 81) above 0, most famous first.
+            if (RelSort >= 0)
+            {
+                var threshold = FSO.SimAntics.Utils.VMTS1Fame.FriendshipThreshold;
+                var myFamily = sel.GetPersonData(VMPersonDataVariable.TS1FamilyNumber);
+                Func<int, short[]> data = (id) => neighbourhood.GetNeighborByID((short)id)?.PersonData;
+                switch (RelSort)
+                {
+                    case 0:
+                        rItems = rItems.Where(x => FSO.SimAntics.Utils.VMTS1Fame.AreFameFriends(
+                            neighbourhood.GetNeighborByID((short)x.Item2)?.Relationships, x.Item2, rel, neighbour, threshold)).ToList();
+                        break;
+                    case 1:
+                        rItems = rItems.Where(x => { var d = data(x.Item2); return myFamily != 0 && d != null && d.Length > 61 && d[61] == myFamily; }).ToList();
+                        break;
+                    case 2:
+                        Func<int, int> power = (id) => { var d = data(id); return (d != null && d.Length > 81) ? d[81] * 10000 + d[80] : 0; };
+                        rItems = rItems.Where(x => { var d = data(x.Item2); return d != null && d.Length > 81 && d[81] > 0; })
+                            .OrderByDescending(x => power(x.Item2)).ToList();
+                        break;
+                }
+            }
 
             bool difference = false;
             if (rItems.Count == Items.Count)
