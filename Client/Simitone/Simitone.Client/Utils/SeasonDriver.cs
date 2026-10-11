@@ -3,6 +3,7 @@ using FSO.SimAntics;
 using FSO.SimAntics.Seasons;
 using System;
 using System.IO;
+using System.Linq;
 using Microsoft.Xna.Framework;
 
 namespace Simitone.Client.Utils
@@ -34,16 +35,29 @@ namespace Simitone.Client.Utils
         public static int UpdateCalls;
 
         /// <summary>Text for the season_info cheat: season state, plants, foliage and sprite counters.</summary>
+        private static bool IsPlantish(string label)
+        {
+            var l = label.ToLowerInvariant();
+            return l.StartsWith("plant") || l.StartsWith("flowers") || l.Contains("cactus") || l.Contains("tree") || l.Contains("shrub");
+        }
+
         public static string Report(VM vm, int lengthIndex)
         {
             var c = vm.Context.Clock;
             var len = SeasonModel.LengthFromIndex(lengthIndex);
             var abs = SeasonModel.AbsoluteDay(c.Year, c.Month, c.DayOfMonth);
             int deciduous = 0, blossom = 0, evergreen = 0;
+            var seen = new System.Collections.Generic.SortedDictionary<string, int>();
             foreach (var e in vm.Entities)
             {
                 var label = e?.Object?.OBJ?.ChunkLabel;
-                switch (FSO.LotView.Utils.SeasonalFoliage.Classify(label))
+                var kind = FSO.LotView.Utils.SeasonalFoliage.Classify(label, e?.Object?.OBJ?.GUID ?? 0);
+                if (label != null && (kind != FSO.LotView.Utils.FoliageKind.None || IsPlantish(label)))
+                {
+                    var key = (e.ToString() ?? "?") + " [" + label + "] " + kind;
+                    seen[key] = seen.TryGetValue(key, out var n) ? n + 1 : 1;
+                }
+                switch (kind)
                 {
                     case FSO.LotView.Utils.FoliageKind.Deciduous: deciduous++; break;
                     case FSO.LotView.Utils.FoliageKind.Blossom: blossom++; break;
@@ -57,7 +71,8 @@ namespace Simitone.Client.Utils
                 + "Foliage objects: " + deciduous + " deciduous, " + blossom + " blossom, " + evergreen + " evergreen; world season " + (vm.Context.World?.State?.FoliageSeason) + "\n"
                 + "Foliage sprites: requested " + FSO.LotView.Utils.SeasonalSprites.Requests + ", recoloured " + FSO.LotView.Utils.SeasonalSprites.Built
                 + ", no frame " + FSO.LotView.Utils.SeasonalSprites.NoFrame + ", no pixels " + FSO.LotView.Utils.SeasonalSprites.NoPixels
-                + (FSO.LotView.Utils.SeasonalSprites.NoPixels > 0 ? "\nLast failure: " + FSO.LotView.Utils.SeasonalSprites.LastFailure : "");
+                + (FSO.LotView.Utils.SeasonalSprites.NoPixels > 0 ? "\nLast failure: " + FSO.LotView.Utils.SeasonalSprites.LastFailure : "")
+                + "\nPlants on this lot (name [label] kind):\n" + string.Join("\n", seen.Select(p => p.Key + " x" + p.Value).Take(24));
         }
 
         private long LastSlot = long.MinValue;

@@ -127,18 +127,44 @@ namespace Simitone.Routing.Tests
             {
                 Check(SeasonalFoliage.Classify("Trees - Apple Front") == FoliageKind.Blossom, "apple blossoms");
                 Check(SeasonalFoliage.Classify("Tree - Curb - Cherry") == FoliageKind.Blossom, "cherry blossoms");
+                Check(SeasonalFoliage.Classify("Trees - Prune - Left") == FoliageKind.Blossom, "prune blossoms");
+                Check(SeasonalFoliage.Classify("Trees - Superstar - Orange - 4") == FoliageKind.Blossom, "the orange tree blossoms, turns and goes bare");
                 Check(SeasonalFoliage.Classify("Trees - Birch") == FoliageKind.Deciduous, "birch");
+                Check(SeasonalFoliage.Classify("Trees - Oak - Front") == FoliageKind.Deciduous, "crape myrtle (labelled oak)");
                 Check(SeasonalFoliage.Classify("Trees - Unleashed - Willow - 3") == FoliageKind.Deciduous, "willow");
-                Check(SeasonalFoliage.Classify("Shrub - Rose Bush") == FoliageKind.Deciduous, "rose bush");
+                Check(SeasonalFoliage.Classify("Lamps - Street - Tree - C") == FoliageKind.Deciduous, "the Tree of Paradise has leaves");
+                Check(SeasonalFoliage.Classify("Lamps - Street - Gas") == FoliageKind.None, "other street lamps are not trees");
                 Check(SeasonalFoliage.Classify("Trees - Pine - Large - Left") == FoliageKind.Evergreen, "pine");
                 Check(SeasonalFoliage.Classify("Trees - Barrel Palm - Front") == FoliageKind.Evergreen, "palm");
                 Check(SeasonalFoliage.Classify("Shrub - Hedge Low") == FoliageKind.Evergreen, "hedge");
-                Check(SeasonalFoliage.Classify("Trees - Superstar - Orange - 4") == FoliageKind.Evergreen, "orange tree");
-                Check(SeasonalFoliage.Classify("Trees - Spellbound - Dead - 3") == FoliageKind.None, "spellbound trees keep their own look");
-                Check(SeasonalFoliage.Classify("Shrub - Beach - Hau") == FoliageKind.None, "beach plants");
-                Check(SeasonalFoliage.Classify("Lamps - Street - Tree") == FoliageKind.None, "a tree-shaped lamp is not a tree");
+                Check(SeasonalFoliage.Classify("Shrub - Hedge Fame") == FoliageKind.Evergreen, "topiary hedge");
+                Check(SeasonalFoliage.Classify("Shrub - Rose Bush") == FoliageKind.Evergreen, "shrubs keep their leaves");
+                Check(SeasonalFoliage.Classify("Shrub - Beach - Century - B") == FoliageKind.Evergreen, "beach plants get snow too");
+                Check(SeasonalFoliage.Classify("Shrub - Snowy - Tumbleweed") == FoliageKind.Evergreen && SeasonalFoliage.Classify("Shrub - Snowy - Cypress") == FoliageKind.Evergreen, "snowy shrubs");
+                Check(SeasonalFoliage.Classify("Shrub - Gypsy") == FoliageKind.Evergreen && SeasonalFoliage.Classify("Trees - Spellbound - Autumn2 Left") == FoliageKind.Evergreen, "spellbound plants get snow");
+                Check(SeasonalFoliage.Classify("Trees - Spellbound - Dead - 3") == FoliageKind.Evergreen, "dead trees get snow");
+                Check(SeasonalFoliage.Classify("Shrub - Lily Pad") == FoliageKind.None && SeasonalFoliage.Classify("Shrub - Cat Tails") == FoliageKind.None, "water plants");
+                Check(SeasonalFoliage.Classify("Trees - Cactus") == FoliageKind.None && SeasonalFoliage.Classify("Trees - Joshua Tree") == FoliageKind.None, "desert plants");
                 Check(SeasonalFoliage.Classify("Flowers - Outdoor - Tulips") == FoliageKind.None, "flowers are not foliage");
                 Check(SeasonalFoliage.Classify(null) == FoliageKind.None && SeasonalFoliage.Classify("") == FoliageKind.None, "no label");
+            });
+
+            yield return ("foliage: Sims Online objects are classified by GUID", () =>
+            {
+                Check(SeasonalFoliage.Classify("Trees - Cactus", 0x2FF38F53) == FoliageKind.None, "cactus");
+                Check(SeasonalFoliage.Classify("Shrub - Juniper Bush", 0x154522AF) == FoliageKind.Evergreen, "juniper");
+                Check(SeasonalFoliage.Classify("whatever", 0x15460FCA) == FoliageKind.Evergreen, "sword fern");
+                Check(SeasonalFoliage.Classify("Trees - Pine - Snow", 0x56040A7B) == FoliageKind.None, "already snowy");
+                Check(SeasonalFoliage.Classify("Trees - Birch", 0x12345678) == FoliageKind.Deciduous, "unknown GUIDs use the label");
+            });
+
+            yield return ("foliage: leaf type and fruit follow the object name", () =>
+            {
+                Check(SeasonalFoliage.LeafOf("Trees - Prune - Rear") == FoliageLeaf.Red, "prune");
+                Check(SeasonalFoliage.LeafOf("Trees - Oak - Left") == FoliageLeaf.GreenAndPink && SeasonalFoliage.LeafOf("Trees - Crape Myrtle") == FoliageLeaf.GreenAndPink, "crape myrtle");
+                Check(SeasonalFoliage.LeafOf("Trees - Birch") == FoliageLeaf.Green, "birch");
+                Check(SeasonalFoliage.HasFruit("Trees - Apple Rear") && SeasonalFoliage.HasFruit("Trees - Superstar - Orange - 2"), "apples and oranges");
+                Check(!SeasonalFoliage.HasFruit("Tree - Curb - Cherry") && !SeasonalFoliage.HasFruit("Trees - Birch"), "other trees");
             });
 
             yield return ("foliage: every kind has the right look in every season", () =>
@@ -219,7 +245,45 @@ namespace Simitone.Routing.Tests
                 Check(colours.Count >= 4, "autumn should mix yellows, oranges and reds, got " + colours.Count + " colours");
             });
 
-            yield return ("foliage: spring blossoms put pink and white among the green", () =>
+            yield return ("foliage: bare fruit trees lose their fruit and crape myrtles their flowers", () =>
+            {
+                byte r = 190, g = 40, b = 40, a = 255; //apple
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 5, 5, FoliageLeaf.Green, true);
+                Check(a == 0, "apple stays in winter");
+                r = 230; g = 120; b = 35; a = 255; //orange
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 5, 5, FoliageLeaf.Green, true);
+                Check(a == 0, "orange stays in winter");
+                r = 116; g = 71; b = 25; a = 255; //orange-brown bark
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 5, 5, FoliageLeaf.Green, true);
+                Check(a == 255 && r == 116, "bark is not fruit");
+                r = 190; g = 40; b = 40; a = 255; //the same red on a tree without fruit
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 5, 5, FoliageLeaf.Green, false);
+                Check(a == 255 && r == 190, "no fruit, nothing removed");
+                r = 220; g = 110; b = 140; a = 255; //crape myrtle flower
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 5, 5, FoliageLeaf.GreenAndPink, false);
+                Check(a == 0, "flower stays in winter");
+                r = 220; g = 110; b = 140; a = 255;
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Autumn, 5, 5, FoliageLeaf.GreenAndPink, false);
+                Check(a == 255 && r >= g && b < 120, "flower turns with the leaves in autumn");
+                r = 190; g = 40; b = 40; a = 255;
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Autumn, 5, 5, FoliageLeaf.Green, true);
+                Check(a == 255 && r == 190, "apples hang on in autumn");
+            });
+
+            yield return ("foliage: red prune leaves are leaves", () =>
+            {
+                Check(SeasonalFoliage.IsRedLeaf(140, 40, 45) && SeasonalFoliage.IsRedLeaf(90, 20, 25), "crimson");
+                Check(!SeasonalFoliage.IsRedLeaf(90, 70, 50) && !SeasonalFoliage.IsRedLeaf(60, 60, 60) && !SeasonalFoliage.IsRedLeaf(30, 90, 30), "bark, grey and green");
+                byte r = 140, g = 40, b = 45, a = 255;
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, 1, 1, FoliageLeaf.Red, false);
+                //a prune tree must change in winter: either dropped or turned to twig colour
+                Check(a == 0 || !SeasonalFoliage.IsRedLeaf(r, g, b), "prune leaf survived winter");
+                r = 140; g = 40; b = 45; a = 255;
+                SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Spring, 1, 1, FoliageLeaf.Red, false);
+                Check(a == 255 && g > r, "prune leaves are green in spring");
+            });
+
+            yield return ("foliage: spring blossoms put pink and white clusters among the green", () =>
             {
                 int blossom = 0, green = 0;
                 for (int x = 0; x < 60; x++)
@@ -231,21 +295,38 @@ namespace Simitone.Routing.Tests
                         if (r > g && b > 150) blossom++; else if (g > r) green++;
                     }
                 }
-                Check(blossom > 3600 * 0.25 && blossom < 3600 * 0.65, "blossom share out of range: " + blossom);
-                Check(green > 3600 * 0.25, "the rest stays leafy: " + green);
+                Check(blossom > 3600 * 0.08 && blossom < 3600 * 0.30, "blossom share out of range: " + blossom);
+                Check(green > 3600 * 0.6, "the rest stays leafy: " + green);
             });
 
-            yield return ("foliage: frosted evergreens stay visible, with some white", () =>
+            yield return ("foliage: frost settles on top of a sprite and keeps its outline", () =>
             {
-                int white = 0;
-                for (int x = 0; x < 60; x++)
-                {
-                    byte r = 20, g = 80, b = 30, a = 255;
-                    SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Frosted, x, x * 2);
-                    Check(a == 255, "frost does not remove needles");
-                    if (r > 170 && g > 170 && b > 170) white++;
-                }
-                Check(white > 0 && white < 60, "some but not all pixels are snow, got " + white);
+                const int w = 30, h = 40;
+                var px = new byte[w * h * 4];
+                for (int y = 5; y < 35; y++)
+                    for (int x = 6; x < 24; x++)
+                    {
+                        int i = (y * w + x) * 4;
+                        px[i] = 20; px[i + 1] = (byte)(70 + (x * 7 + y * 3) % 40); px[i + 2] = 30; px[i + 3] = 255;
+                    }
+                var before = (byte[])px.Clone();
+                SeasonalFoliage.Frost(px, w, h);
+                int topWhite = 0, bottomWhite = 0;
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                    {
+                        int i = (y * w + x) * 4;
+                        Check(px[i + 3] == before[i + 3], "frost changed the outline");
+                        if (px[i + 3] == 0) continue;
+                        bool white = px[i] > 170 && px[i + 1] > 170 && px[i + 2] > 170;
+                        if (white && y < 15) topWhite++;
+                        if (white && y >= 25) bottomWhite++;
+                    }
+                Check(topWhite > 0, "no snow on top");
+                Check(topWhite > bottomWhite * 2, "snow should sit higher than lower: top " + topWhite + ", bottom " + bottomWhite);
+                var again = (byte[])before.Clone();
+                SeasonalFoliage.Frost(again, w, h);
+                Check(again.SequenceEqual(px), "frost is not deterministic");
             });
         }
     }
