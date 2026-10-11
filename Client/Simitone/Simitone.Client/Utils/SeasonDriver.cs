@@ -56,7 +56,8 @@ namespace Simitone.Client.Utils
                 + PlantSeasons.Describe(vm) + "\n"
                 + "Foliage objects: " + deciduous + " deciduous, " + blossom + " blossom, " + evergreen + " evergreen; world season " + (vm.Context.World?.State?.FoliageSeason) + "\n"
                 + "Foliage sprites: requested " + FSO.LotView.Utils.SeasonalSprites.Requests + ", recoloured " + FSO.LotView.Utils.SeasonalSprites.Built
-                + ", no frame " + FSO.LotView.Utils.SeasonalSprites.NoFrame + ", no pixels " + FSO.LotView.Utils.SeasonalSprites.NoPixels;
+                + ", no frame " + FSO.LotView.Utils.SeasonalSprites.NoFrame + ", no pixels " + FSO.LotView.Utils.SeasonalSprites.NoPixels
+                + (FSO.LotView.Utils.SeasonalSprites.NoPixels > 0 ? "\nLast failure: " + FSO.LotView.Utils.SeasonalSprites.LastFailure : "");
         }
 
         private long LastSlot = long.MinValue;
