@@ -176,14 +176,27 @@ namespace Simitone.Routing.Tests
                 Check(lr == 20 && lg == 90 && lb == 25 && la == 255, "normal look changed a leaf");
             });
 
-            yield return ("foliage: bare trees lose every leaf pixel", () =>
+            yield return ("foliage: bare trees keep a share of twig pixels, none of them green", () =>
             {
-                for (int i = 0; i < 50; i++)
+                int kept = 0, total = 0;
+                for (int x = 0; x < 60; x++)
                 {
-                    byte r = 20, g = (byte)(70 + i), b = 25, a = 255;
-                    SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, i, i * 3);
-                    Check(a == 0, "leaf pixel " + i + " is still visible");
+                    for (int y = 0; y < 60; y++)
+                    {
+                        byte r = 20, g = (byte)(70 + (x + y) % 50), b = 25, a = 255;
+                        SeasonalFoliage.Recolor(ref r, ref g, ref b, ref a, FoliageLook.Bare, x, y);
+                        total++;
+                        if (a == 0) continue;
+                        kept++;
+                        Check(a == 255, "kept twig pixel must be opaque");
+                        Check(!SeasonalFoliage.IsLeaf(r, g, b), "twig pixel " + x + "," + y + " is still green");
+                        byte r2 = 20, g2 = (byte)(70 + (x + y) % 50), b2 = 25, a2 = 255;
+                        SeasonalFoliage.Recolor(ref r2, ref g2, ref b2, ref a2, FoliageLook.Bare, x, y);
+                        Check(r == r2 && g == g2 && b == b2 && a == a2, "not deterministic");
+                    }
                 }
+                double share = kept * 100.0 / total;
+                Check(share > 30 && share < 55, "kept share " + share + "% is outside 30-55%");
             });
 
             yield return ("foliage: autumn leaves are no longer green, and the same pixel always gets the same colour", () =>
