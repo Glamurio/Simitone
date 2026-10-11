@@ -322,6 +322,15 @@ namespace Simitone.Routing.Tests
                         if (white && y < 15) topWhite++;
                         if (white && y >= 25) bottomWhite++;
                     }
+                int covered = 0, solid = 0;
+                for (int i = 0; i < w * h; i++)
+                {
+                    if (px[i * 4 + 3] == 0) continue;
+                    solid++;
+                    if (px[i * 4] >= 150) covered++;
+                }
+                double share = covered * 1.0 / solid;
+                Check(share > 0.30 && share < 0.55, "snow covers " + share + " of the sprite, expected about 0.36");
                 Check(topWhite > 0, "no snow on top");
                 Check(topWhite > bottomWhite * 2, "snow should sit higher than lower: top " + topWhite + ", bottom " + bottomWhite);
                 var again = (byte[])before.Clone();
