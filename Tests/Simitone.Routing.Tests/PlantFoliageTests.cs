@@ -337,6 +337,14 @@ namespace Simitone.Routing.Tests
                 SeasonalFoliage.Frost(again, w, h);
                 Check(again.SequenceEqual(px), "frost is not deterministic");
             });
+
+            yield return ("foliage: only real trees drop leaves, and only warm saturated pixels are fallen leaves", () =>
+            {
+                Check(SeasonalFoliage.IsTree("Trees - Birch") && SeasonalFoliage.IsTree("Tree - Curb - Cherry") && SeasonalFoliage.IsTree("Trees - Oak - Left"), "trees");
+                Check(!SeasonalFoliage.IsTree("Shrub - Rose Bush") && !SeasonalFoliage.IsTree("Lamps - Street - Tree - A") && !SeasonalFoliage.IsTree("Trees - Cactus") && !SeasonalFoliage.IsTree(null), "not trees");
+                Check(SeasonalFoliage.IsFallenLeaf(240, 140, 20) && SeasonalFoliage.IsFallenLeaf(230, 190, 30) && SeasonalFoliage.IsFallenLeaf(200, 40, 30), "orange, yellow, red");
+                Check(!SeasonalFoliage.IsFallenLeaf(120, 120, 125) && !SeasonalFoliage.IsFallenLeaf(40, 110, 40) && !SeasonalFoliage.IsFallenLeaf(60, 50, 45), "grey trunk, green leaf, dark bark");
+            });
         }
     }
 }
