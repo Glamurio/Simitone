@@ -72,6 +72,9 @@ namespace Simitone.Client.Utils
                 + "Foliage objects: " + deciduous + " deciduous, " + blossom + " blossom, " + evergreen + " evergreen; world season " + (vm.Context.World?.State?.FoliageSeason) + "\n"
                 + "Foliage sprites: requested " + FSO.LotView.Utils.SeasonalSprites.Requests + ", recoloured " + FSO.LotView.Utils.SeasonalSprites.Built
                 + ", no frame " + FSO.LotView.Utils.SeasonalSprites.NoFrame + ", no pixels " + FSO.LotView.Utils.SeasonalSprites.NoPixels
+                + "\nSnowed sprites " + FSO.LotView.Utils.SeasonalSprites.Snowed + " (lumps cut from " + FSO.LotView.Utils.SnowLumps.LibraryFrames
+                + " snowy frames, failures " + FSO.LotView.Utils.SnowLumps.LibraryFailures + "), leafless sprites " + FSO.LotView.Utils.SeasonalSprites.Branched
+                + " (tree skeletons " + FSO.LotView.Utils.BareTreeGroup.Skeletons + ", failures " + FSO.LotView.Utils.BareTreeGroup.Failures + ")"
                 + (FSO.LotView.Utils.SeasonalSprites.NoPixels > 0 ? "\nLast failure: " + FSO.LotView.Utils.SeasonalSprites.LastFailure : "")
                 + "\nPlants on this lot (name [label] kind):\n" + string.Join("\n", seen.Select(p => p.Key + " x" + p.Value).Take(24));
         }

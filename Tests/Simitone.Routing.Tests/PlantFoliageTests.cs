@@ -3,6 +3,7 @@ using FSO.SimAntics.Seasons;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.Xna.Framework;
 
 namespace Simitone.Routing.Tests
 {
@@ -177,10 +178,10 @@ namespace Simitone.Routing.Tests
                 Check(SeasonalFoliage.LookFor(FoliageKind.Blossom, 2) == FoliageLook.Autumn && SeasonalFoliage.LookFor(FoliageKind.Deciduous, 2) == FoliageLook.Autumn, "autumn leaves");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 2) == FoliageLook.Normal, "pine autumn");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Blossom, 3) == FoliageLook.Bare && SeasonalFoliage.LookFor(FoliageKind.Deciduous, 3) == FoliageLook.Bare, "bare in winter");
-                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Normal, "evergreens without a snowy twin are left alone in winter");
-                SeasonalFoliage.CraftedFrost = true;
-                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Frosted, "frosted pine when crafted frost is on");
-                SeasonalFoliage.CraftedFrost = false;
+                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Frosted, "evergreens get snow in winter");
+                SeasonalFoliage.SnowOnEvergreens = false;
+                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Normal, "and none when that is switched off");
+                SeasonalFoliage.SnowOnEvergreens = true;
                 Check(SeasonalFoliage.HasRealWinter(0x72BDBB7D) && SeasonalFoliage.HasRealWinter(0x3026C759) && !SeasonalFoliage.HasRealWinter(0x358D29CE), "real winter variants: Trees4/Shrubs3 yes, TreesHD stubs no");
                 Check(SeasonalFoliage.LookFor(FoliageKind.None, 3) == FoliageLook.Normal, "no foliage, no look");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Deciduous, -1) == FoliageLook.Normal, "seasons off");
@@ -303,43 +304,107 @@ namespace Simitone.Routing.Tests
                 Check(green > 3600 * 0.6, "the rest stays leafy: " + green);
             });
 
-            yield return ("foliage: frost settles on top of a sprite and keeps its outline", () =>
+            yield return ("snow: lumps are cut from snow along their shaded undersides, edge-touching ones are dropped", () =>
             {
-                const int w = 30, h = 40;
-                var px = new byte[w * h * 4];
-                for (int y = 5; y < 35; y++)
-                    for (int x = 6; x < 24; x++)
+                const int w = 60, h = 30;
+                var px = new Color[w * h];
+                //two lumps side by side: bright tops (rows 6-9), grey undersides (rows 10-13), touching at x = 30
+                for (int y = 6; y < 14; y++)
+                    for (int x = 8; x < 52; x++)
                     {
-                        int i = (y * w + x) * 4;
-                        px[i] = 20; px[i + 1] = (byte)(70 + (x * 7 + y * 3) % 40); px[i + 2] = 30; px[i + 3] = 255;
+                        byte v = (byte)(y < 10 ? 235 : 150);
+                        px[y * w + x] = new Color(v, v, (byte)(v + 4 > 255 ? 255 : v + 4), (byte)255);
                     }
-                var before = (byte[])px.Clone();
-                SeasonalFoliage.Frost(px, w, h);
-                int topWhite = 0, bottomWhite = 0;
-                for (int y = 0; y < h; y++)
+                for (int y = 6; y < 10; y++) px[y * w + 30] = new Color(150, 150, 154, 255); //crease between the two tops
+                //a lump touching the frame edge
+                for (int y = 20; y < 26; y++) for (int x = 0; x < 8; x++) px[y * w + x] = new Color(240, 240, 240, 255);
+                var lumps = SnowLumps.CutLumps(px, w, h, 10);
+                Check(lumps.Count == 2, "expected two lumps, got " + lumps.Count);
+                Check(lumps.All(l => l.H == 8 && l.W >= 20), "each lump has its top and its underside: " + string.Join(",", lumps.Select(l => l.W + "x" + l.H)));
+            });
+
+            yield return ("snow: lumps settle on top surfaces and silhouette tops, not on vertical sides", () =>
+            {
+                //a box hedge: top face rows 10-29 (z rises going up the screen, as in the game's hedges), front face rows 30-79
+                const int w = 80, h = 80;
+                var px = new Color[w * h]; var z = new byte[w * h];
+                for (int y = 10; y < 80; y++)
+                    for (int x = 10; x < 70; x++)
+                    {
+                        px[y * w + x] = new Color(30, (byte)(100 + (x * 7 + y * 3) % 50), 30, 255);
+                        z[y * w + x] = (byte)(y < 30 ? 150 - (y - 10) * 3 : 90 + (y - 30));
+                    }
+                var lib = new List<SnowLumps.Lump>();
+                for (int k = 0; k < 6; k++)
+                {
+                    int lw = 8 + k, lh = 6;
+                    var lp = new Color[lw * lh];
+                    for (int i = 0; i < lp.Length; i++) lp[i] = new Color(240, 242, 246, 255);
+                    lib.Add(new SnowLumps.Lump { W = lw, H = lh, Area = lw * lh, Px = lp });
+                }
+                Check(SnowLumps.Apply(px, z, w, h, 3, 42, lib, out var outPx, out var outZ, out var outH), "nothing placed");
+                int pad = outH - h;
+                Check(pad == 6, "the sprite grows by the tallest lump: " + pad);
+                int top = 0, side = 0;
+                for (int y = 0; y < outH; y++)
                     for (int x = 0; x < w; x++)
                     {
-                        int i = (y * w + x) * 4;
-                        Check(px[i + 3] == before[i + 3], "frost changed the outline");
-                        if (px[i + 3] == 0) continue;
-                        bool white = px[i] > 170 && px[i + 1] > 170 && px[i + 2] > 170;
-                        if (white && y < 15) topWhite++;
-                        if (white && y >= 25) bottomWhite++;
+                        var c = outPx[y * w + x];
+                        if (c.R < 200 || c.A == 0) continue;
+                        int oy = y - pad;
+                        if (oy < 30) top++; else if (oy >= 36) side++; //rows 30-35: snow hanging over the rim
                     }
-                int covered = 0, solid = 0;
+                Check(top > 300, "the top face should be snowy: " + top);
+                Check(side == 0, "no snow on the vertical front face: " + side);
+                for (int y = 0; y < h; y++)
+                    for (int x = 0; x < w; x++)
+                        if (px[y * w + x].A > 0 && outPx[(y + pad) * w + x].A == 0) Check(false, "a pixel of the plant went missing");
+                Check(SnowLumps.Apply(px, z, w, h, 3, 42, lib, out var again, out var againZ, out var againH) && again.SequenceEqual(outPx) && againZ.SequenceEqual(outZ), "snow is not deterministic");
+            });
+
+            yield return ("bare trees: leaves go, the trunk stays, nothing new appears, same result every time", () =>
+            {
+                //a 2-tile "tree": a brown trunk (front tile) and a green crown split over two frames (rear tile on top)
+                const int w = 60, h = 90;
+                byte[] Frame(bool crownOnly)
+                {
+                    var rgba = new byte[w * h * 4];
+                    for (int y = 0; y < h; y++)
+                        for (int x = 0; x < w; x++)
+                        {
+                            int i = (y * w + x) * 4;
+                            bool trunk = !crownOnly && x >= 27 && x <= 32 && y >= 30;
+                            bool limb = !crownOnly && y >= 25 && y < 60 && Math.Abs((x - 30) - (60 - y) / 2) <= 1;
+                            bool crown = (x - 30) * (x - 30) + (y - 30) * (y - 30) * 2 < 600 && !trunk && !limb;
+                            if (trunk || limb) { rgba[i] = 110; rgba[i + 1] = 80; rgba[i + 2] = 60; rgba[i + 3] = 255; }
+                            else if (crown) { rgba[i] = 40; rgba[i + 1] = (byte)(110 + (x * 5 + y * 3) % 60); rgba[i + 2] = 35; rgba[i + 3] = 255; }
+                        }
+                    return rgba;
+                }
+                var a = Frame(false); var b = Frame(true);
+                var tiles = new List<BareBranches.BareTile>
+                {
+                    new BareBranches.BareTile { Rgba = a, W = w, H = h, X = 0, Y = 0 },
+                    new BareBranches.BareTile { Rgba = b, W = w, H = h, X = 0, Y = -20 }
+                };
+                var sk = BareBranches.BuildSkeleton(tiles, 1, FoliageLeaf.Green, false);
+                var outA = (byte[])a.Clone();
+                BareBranches.Apply(sk, outA, null, w, h, 0, 0, false, FoliageLeaf.Green, false);
+                int green = 0, trunkKept = 0;
                 for (int i = 0; i < w * h; i++)
                 {
-                    if (px[i * 4 + 3] == 0) continue;
-                    solid++;
-                    if (px[i * 4] >= 150) covered++;
+                    int r = outA[i * 4], g = outA[i * 4 + 1], bl = outA[i * 4 + 2], al = outA[i * 4 + 3];
+                    Check(!(a[i * 4 + 3] == 0 && al > 0), "a transparent pixel became visible");
+                    Check(al <= a[i * 4 + 3], "alpha went up");
+                    if (al > 0 && g > r + 25 && g > bl + 25) green++;
+                    int x = i % w, y = i / w;
+                    if (x >= 28 && x <= 31 && y >= 70 && al > 0) trunkKept++;
                 }
-                double share = covered * 1.0 / solid;
-                Check(share > 0.30 && share < 0.55, "snow covers " + share + " of the sprite, expected about 0.36");
-                Check(topWhite > 0, "no snow on top");
-                Check(topWhite > bottomWhite * 2, "snow should sit higher than lower: top " + topWhite + ", bottom " + bottomWhite);
-                var again = (byte[])before.Clone();
-                SeasonalFoliage.Frost(again, w, h);
-                Check(again.SequenceEqual(px), "frost is not deterministic");
+                Check(green == 0, "leaves left: " + green);
+                Check(trunkKept > 40, "the trunk should stay: " + trunkKept);
+                var again = (byte[])a.Clone();
+                BareBranches.Apply(BareBranches.BuildSkeleton(tiles, 1, FoliageLeaf.Green, false), again, null, w, h, 0, 0, false, FoliageLeaf.Green, false);
+                Check(again.SequenceEqual(outA), "bare trees are not deterministic");
             });
 
             yield return ("foliage: only real trees drop leaves, and only warm saturated pixels are fallen leaves", () =>
