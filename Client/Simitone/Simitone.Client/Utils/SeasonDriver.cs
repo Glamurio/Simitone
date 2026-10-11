@@ -33,6 +33,7 @@ namespace Simitone.Client.Utils
         public static int LastChanged;
         public static bool LastRainSeen;
         public static int UpdateCalls;
+        public static short LastWeatherData;
 
         /// <summary>Text for the season_info cheat: season state, plants, foliage and sprite counters.</summary>
         private static bool IsPlantish(string label)
@@ -66,7 +67,7 @@ namespace Simitone.Client.Utils
             }
             return "Date " + c.Year + "-" + c.Month + "-" + c.DayOfMonth + " " + c.Hours + ":00, season " + SeasonModel.SeasonOf(abs, len)
                 + ", day " + (SeasonModel.DayInSeason(abs, len) + 1) + " of " + len + "\n"
-                + "Driver updates " + UpdateCalls + ", last plant action: " + LastAction + " (" + LastChanged + " plants), raining " + LastRainSeen + "\n"
+                + "Driver updates " + UpdateCalls + ", last plant action: " + LastAction + " (" + LastChanged + " plants), raining " + LastRainSeen + " (weather data 0x" + LastWeatherData.ToString("X4") + ")\n"
                 + PlantSeasons.Describe(vm) + "\n"
                 + "Foliage objects: " + deciduous + " deciduous, " + blossom + " blossom, " + evergreen + " evergreen; world season " + (vm.Context.World?.State?.FoliageSeason) + "\n"
                 + "Foliage sprites: requested " + FSO.LotView.Utils.SeasonalSprites.Requests + ", recoloured " + FSO.LotView.Utils.SeasonalSprites.Built
@@ -196,21 +197,44 @@ namespace Simitone.Client.Utils
             }
         }
 
+        private DateTime LastRainWater = DateTime.MinValue;
+
+        /// <summary>
+        /// Read from the weather data itself, not from WeatherIntensity: that is only refreshed by the renderer's own update,
+        /// which lags a frame behind the weather this driver has just set.
+        /// </summary>
+        private static bool IsRaining(WeatherController weather)
+        {
+            if (weather.IsManual)
+                return weather.WeatherType == WeatherType.Rain && !weather.IsHeatwave && (weather.WeatherData & 0xFF) > 5;
+            return weather.WeatherType == WeatherType.Rain && weather.WeatherIntensity > 0.05f;
+        }
+
         /// <summary>
         /// Rain waters the outdoor plants, winter wilts and then kills them, early spring brings them back (PlantSeasons).
-        /// Runs once per game hour, and again when the rain starts or stops.
+        /// Runs once per game hour, again when the rain starts or stops, and while it rains every couple of seconds: the plants
+        /// lose water on their own pass (15 per pass), so a single top-up at the start of the rain would leave the Water
+        /// interaction showing again soon after.
         /// </summary>
         private void UpdatePlants(VM vm, WeatherController weather, Season season, long abs, int hour, int length)
         {
-            bool raining = weather.WeatherType == WeatherType.Rain && weather.WeatherIntensity > 0.05f;
+            bool raining = IsRaining(weather);
             long key = abs * 24 + hour;
-            if (key == LastPlantKey && raining == LastRaining) return;
+            var now = DateTime.UtcNow;
+            bool keepWatering = raining && (now - LastRainWater).TotalSeconds >= 2;
+            if (key == LastPlantKey && raining == LastRaining && !keepWatering) return;
             LastPlantKey = key;
             LastRaining = raining;
+            if (raining) LastRainWater = now;
             var action = PlantSeasons.Decide(season, SeasonModel.DayInSeason(abs, length), length, raining);
-            LastChanged = PlantSeasons.Apply(vm, action);
-            LastAction = action + " at " + abs + " h" + hour;
+            var changed = PlantSeasons.Apply(vm, action);
+            if (changed > 0 || action != PlantAction.Water)
+            {
+                LastChanged = changed;
+                LastAction = action + " at " + abs + " h" + hour;
+            }
             LastRainSeen = raining;
+            LastWeatherData = weather.WeatherData;
         }
     }
 }

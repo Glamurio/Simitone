@@ -177,7 +177,11 @@ namespace Simitone.Routing.Tests
                 Check(SeasonalFoliage.LookFor(FoliageKind.Blossom, 2) == FoliageLook.Autumn && SeasonalFoliage.LookFor(FoliageKind.Deciduous, 2) == FoliageLook.Autumn, "autumn leaves");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 2) == FoliageLook.Normal, "pine autumn");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Blossom, 3) == FoliageLook.Bare && SeasonalFoliage.LookFor(FoliageKind.Deciduous, 3) == FoliageLook.Bare, "bare in winter");
-                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Frosted, "frosted pine");
+                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Normal, "evergreens without a snowy twin are left alone in winter");
+                SeasonalFoliage.CraftedFrost = true;
+                Check(SeasonalFoliage.LookFor(FoliageKind.Evergreen, 3) == FoliageLook.Frosted, "frosted pine when crafted frost is on");
+                SeasonalFoliage.CraftedFrost = false;
+                Check(SeasonalFoliage.HasRealWinter(0x72BDBB7D) && SeasonalFoliage.HasRealWinter(0x3026C759) && !SeasonalFoliage.HasRealWinter(0x358D29CE), "real winter variants: Trees4/Shrubs3 yes, TreesHD stubs no");
                 Check(SeasonalFoliage.LookFor(FoliageKind.None, 3) == FoliageLook.Normal, "no foliage, no look");
                 Check(SeasonalFoliage.LookFor(FoliageKind.Deciduous, -1) == FoliageLook.Normal, "seasons off");
             });
